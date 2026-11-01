@@ -1835,7 +1835,7 @@ impl wgpu::rwh::HasDisplayHandle for WindowDisplay {
 /// OpenGL. Each is tried when the one before has no surface, adapter or device. A native
 /// crash in the driver can't be
 /// caught in the game; the launcher switches the setting to DirectX 12 after one at
-/// the renderer's start (#746). macOS has Metal only.
+/// the renderer's start (#746). macOS and iOS have Metal only.
 fn backend_order(
     api: GraphicsApi,
     os: &str,
@@ -1843,7 +1843,7 @@ fn backend_order(
     wgpu_backend: bool,
 ) -> Vec<wgpu::Backends> {
     use wgpu::Backends;
-    if os == "macos" || wgpu_backend {
+    if os == "macos" || os == "ios" || wgpu_backend {
         return vec![Backends::default()];
     }
     let windows = os == "windows";
@@ -2204,12 +2204,12 @@ async fn open_backend(
         memory_hints: wgpu::MemoryHints::MemoryUsage,
         ..Default::default()
     };
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(target_vendor = "apple"))]
     let opened = match info.backend {
         wgpu::Backend::Vulkan => horizon_hdr::open_vulkan_device(&adapter, &desc),
         _ => None,
     };
-    #[cfg(target_os = "macos")]
+    #[cfg(target_vendor = "apple")]
     let opened = None;
     let opened = match opened {
         Some(opened) => opened,
@@ -2248,9 +2248,9 @@ async fn open_backend(
 const NO_GPU_DRIVER: &str = "No graphics driver with Vulkan, DirectX 12 or OpenGL found: Horizon needs \
      a GPU driver with one of them. Install the latest driver for your NVIDIA, AMD or Intel GPU and \
      start the game again";
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 const NO_GPU_DRIVER: &str = "No Metal graphics device found";
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+#[cfg(not(any(target_os = "windows", target_vendor = "apple")))]
 const NO_GPU_DRIVER: &str = "No Vulkan or OpenGL graphics driver found: Horizon needs the Vulkan loader \
      (libvulkan.so.1) and a Vulkan driver for your GPU (Mesa's, or NVIDIA's), or OpenGL through EGL";
 /// Logs a step of the renderer's start, for a native crash in the graphics
@@ -11774,13 +11774,14 @@ mod tests {
             order(GraphicsApi::OpenGl, "linux", "x86_64"),
             [Backends::GL]
         );
-        // WGPU_BACKEND picks the backends itself; macOS has Metal only.
+        // WGPU_BACKEND picks the backends itself; macOS and iOS have Metal only.
         for api in GraphicsApi::ALL {
             assert_eq!(
                 backend_order(api, "windows", "aarch64", true),
                 [Backends::default()]
             );
             assert_eq!(order(api, "macos", "aarch64"), [Backends::default()]);
+            assert_eq!(order(api, "ios", "aarch64"), [Backends::default()]);
         }
     }
     #[test]

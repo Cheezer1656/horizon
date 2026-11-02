@@ -108,6 +108,7 @@ mod sprite_cache;
 pub mod sprites;
 pub mod streaming;
 pub mod structure_block;
+pub mod system_open; // ios-port: folders and links opened by the platform
 pub mod tab_list;
 pub mod telemetry;
 pub mod test_block;

@@ -1309,6 +1309,8 @@ pub enum Page {
     Music,
     /// The touch controls' settings. ios-port:
     Touch,
+    /// Signing in with a Microsoft account in the game (`msa`). ios-port:
+    Account,
 }
 #[derive(Clone, Debug, PartialEq)]
 enum Act {
@@ -1364,6 +1366,8 @@ enum Act {
     PlayMusicTrack(String, String),
     /// The Music page: turn this track off, or back on.
     MusicTrackOn(String, bool),
+    /// The Account page's buttons. ios-port:
+    Account(crate::msa::Action),
 }
 enum WKind {
     Button {
@@ -1768,8 +1772,60 @@ fn horizon_page_tooltip(page: Page) -> Option<&'static str> {
         Page::SplitSetup => "horizon.pages.split_setup.tooltip",
         Page::Music => "horizon.pages.music.tooltip",
         Page::Touch => "horizon.pages.touch.tooltip", // ios-port:
+        Page::Account => "horizon.pages.account.tooltip", // ios-port:
         _ => return None,
     })
+}
+/// ios-port: the Account page: where the sign-in stands, then what can be done about it.
+fn account_rows() -> Vec<Row> {
+    use crate::msa::{Action, Status};
+    let one = |key: &str, action: Action| {
+        Row::Buttons(button(0.0, 0.0, 310.0, tr(key), Act::Account(action)), None)
+    };
+    let note = |key: &str| Row::Note(lang::get(key));
+    match crate::msa::status() {
+        Status::SignedOut => vec![
+            note("horizon.account.signed_out"),
+            note("horizon.account.why"),
+            one("horizon.account.sign_in", Action::SignIn),
+        ],
+        Status::Working => vec![
+            note("horizon.account.working"),
+            one("gui.cancel", Action::Cancel),
+        ],
+        Status::Code { url, code } => vec![
+            Row::Note(lang::tr("horizon.account.enter_code", &[&url])),
+            Row::Note(code),
+            if crate::msa::can_open_link() {
+                Row::Buttons(
+                    button(
+                        0.0,
+                        0.0,
+                        150.0,
+                        tr("horizon.account.open_link"),
+                        Act::Account(Action::OpenLink),
+                    ),
+                    Some(button(
+                        0.0,
+                        0.0,
+                        150.0,
+                        tr("gui.cancel"),
+                        Act::Account(Action::Cancel),
+                    )),
+                )
+            } else {
+                one("gui.cancel", Action::Cancel)
+            },
+        ],
+        Status::SignedIn(name) => vec![
+            Row::Note(lang::tr("horizon.account.signed_in", &[&name])),
+            one("horizon.account.sign_out", Action::SignOut),
+        ],
+        Status::Failed(fail) => vec![
+            note(fail.0),
+            one("horizon.account.try_again", Action::SignIn),
+        ],
+    }
 }
 /// The open screen of the picked pack: its title, then its items two to a row (one when the
 /// pack asks for a single column).
@@ -2377,6 +2433,7 @@ impl OptionsUi {
             Page::SplitSetup => "horizon.pages.split_setup",
             Page::Music => "horizon.pages.music",
             Page::Touch => "horizon.pages.touch", // ios-port:
+            Page::Account => "horizon.pages.account", // ios-port:
         }
     }
     fn scrollbar_x(&self, width: f32) -> f32 {
@@ -2587,6 +2644,19 @@ impl OptionsUi {
                 // ios-port:
                 .chain(horizon_client_input::touch::available().then(|| {
                     Row::Buttons(open("horizon.pages.open.touch", Page::Touch), None)
+                }))
+                // ios-port: the game's own Microsoft sign-in, where the build has one.
+                .chain(crate::msa::available().then(|| {
+                    Row::Buttons(
+                        button(
+                            0.0,
+                            0.0,
+                            310.0,
+                            tr("horizon.pages.open.account"),
+                            Act::Push(Page::Account),
+                        ),
+                        None,
+                    )
                 }))
                 .collect()
             }
@@ -2836,6 +2906,7 @@ impl OptionsUi {
             }
             // ios-port:
             Page::Touch => pairs(&horizon_client_input::touch::TouchOpt::ALL.map(Opt::Touch)),
+            Page::Account => account_rows(), // ios-port:
             Page::Mouse => pairs(MOUSE_OPTIONS),
             Page::Chat => pairs(&[
                 Opt::ChatVisibility,
@@ -4420,6 +4491,7 @@ impl OptionsUi {
                         Act::CopyAgentDetails => events.push(Event::CopyAgentDetails),
                         Act::ToggleRecording => events.push(Event::ToggleRecording),
                         Act::ExportRepro => events.push(Event::ExportRepro),
+                        Act::Account(action) => crate::msa::act(action), // ios-port:
                         Act::None => {}
                     }
                 }
@@ -5371,6 +5443,7 @@ impl OptionsUi {
                         Act::CopyAgentDetails => events.push(Event::CopyAgentDetails),
                         Act::ToggleRecording => events.push(Event::ToggleRecording),
                         Act::ExportRepro => events.push(Event::ExportRepro),
+                        Act::Account(action) => crate::msa::act(action), // ios-port:
                         Act::None => {}
                     }
                     return events;

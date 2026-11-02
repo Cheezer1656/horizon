@@ -100,6 +100,14 @@ impl Game<'_> {
     /// Text the input method committed (`WindowEvent::Ime(Commit)`).
     pub(super) fn ime_commit(&mut self, text: &str) {
         preedit::set_preedit(None);
+        self.char_typed(text);
+    }
+
+    /// Characters that come with no key (`KeyboardHandler.charTyped`): an
+    /// input method's commit, the iOS on-screen keyboard's letters, Windows'
+    /// Alt codes. They go to the focused box of a dialog, a title screen
+    /// (world name, server address...) or the open game screen.
+    pub(super) fn char_typed(&mut self, text: &str) {
         let text: String = text.chars().filter(|c| !c.is_control()).collect();
         // ScreenEvent.CharacterTyped.Pre: the input method's committed text
         // reaches a text box by characters, as a key's own text does, so the

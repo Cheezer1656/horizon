@@ -487,6 +487,8 @@ pub struct PadSettings {
     pub repeat_interval: f32,
     /// Action name -> button, `None` for unbound; missing means the default.
     bindings: BTreeMap<&'static str, Option<Button>>,
+    /// The touch controls' settings, in their own file. ios-port:
+    pub touch: crate::touch::TouchSettings,
 }
 impl Default for PadSettings {
     fn default() -> Self {
@@ -510,6 +512,7 @@ impl Default for PadSettings {
             repeat_delay: 0.35,
             repeat_interval: 0.09,
             bindings: BTreeMap::new(),
+            touch: Default::default(), // ios-port:
         }
     }
 }
@@ -518,15 +521,24 @@ fn bool_text(v: bool) -> &'static str {
 }
 impl PadSettings {
     pub fn load(dir: &Path) -> Self {
-        fs::read_to_string(dir.join(FILE))
-            .map(|t| Self::parse(&t))
-            .unwrap_or_default()
+        let touch = crate::touch::TouchSettings::load(dir); // ios-port:
+        Self {
+            touch,
+            ..fs::read_to_string(dir.join(FILE))
+                .map(|t| Self::parse(&t))
+                .unwrap_or_default()
+        }
     }
     /// Written once something differs from the defaults, so players who
     /// never touch a controller get no new file.
     pub fn save(&self, dir: &Path) {
+        self.touch.save(dir); // ios-port:
         let path = dir.join(FILE);
-        if *self != Self::default() || path.exists() {
+        let pad = Self {
+            touch: Default::default(), // ios-port: the touch settings have their own file
+            ..self.clone()
+        };
+        if pad != Self::default() || path.exists() {
             let _ = fs::write(path, self.serialize());
         }
     }

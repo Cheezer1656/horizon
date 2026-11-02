@@ -837,6 +837,8 @@ pub enum Opt {
     TextureFiltering,
     /// `Options.maxAnisotropyBit`.
     MaxAnisotropy,
+    /// The touch controls' settings (`horizon-touch.txt`). ios-port:
+    Touch(horizon_client_input::touch::TouchOpt),
 }
 
 #[cfg(test)]

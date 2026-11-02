@@ -300,6 +300,7 @@ impl Opt {
             Opt::SharePresence => "options.sharePresence",
             Opt::DirectionalAudio => "options.directionalAudio",
             Opt::MusicToast => "options.musicToast",
+            Opt::Touch(t) => t.caption(), // ios-port:
         }
     }
     pub(crate) fn kind(self, s: &Settings) -> Kind {
@@ -362,6 +363,10 @@ impl Opt {
             Opt::PadMoveDeadzone => unit(s.controller.move_deadzone, 0.0, 0.5),
             Opt::PadLookDeadzone => unit(s.controller.look_deadzone, 0.0, 0.5),
             Opt::SprintWindow => unit(s.sprint_window as f32, 0.0, 10.0),
+            // ios-port:
+            Opt::Touch(t) => t
+                .slider(&s.controller.touch)
+                .map_or(Kind::Cycle, Kind::Slider),
             _ => Kind::Cycle,
         }
     }
@@ -648,6 +653,11 @@ impl Opt {
                     ],
                 )
             }
+            // ios-port:
+            Opt::Touch(t) => match t.percent(&s.controller.touch) {
+                Some(v) => percent(c, v),
+                None => generic(c, self.value_text(s)),
+            },
             _ => generic(c, self.value_text(s)),
         }
     }
@@ -825,6 +835,8 @@ impl Opt {
                 gamepad::TextKeyboard::Horizon => "horizon.options.keyboard.horizon",
                 gamepad::TextKeyboard::Steam => "horizon.options.keyboard.steam",
             }),
+            // ios-port:
+            Opt::Touch(t) => t.on(&s.controller.touch).map_or_else(Text::empty, on_off),
             _ => Text::empty(),
         }
     }
@@ -898,6 +910,7 @@ impl Opt {
             Opt::PadMoveDeadzone => s.controller.move_deadzone = step(0.0, 50.0) / 100.0,
             Opt::PadLookDeadzone => s.controller.look_deadzone = step(0.0, 50.0) / 100.0,
             Opt::SprintWindow => s.sprint_window = step(0.0, 10.0) as i32,
+            Opt::Touch(t) => t.set_slider(&mut s.controller.touch, v), // ios-port:
             _ => {}
         }
         if self.affects_preset() {
@@ -1126,6 +1139,7 @@ impl Opt {
                     .unwrap_or(0) as u8;
                 s.controller.keyboard = all[usize::from(next(i, 3))];
             }
+            Opt::Touch(t) => t.toggle(&mut s.controller.touch), // ios-port:
             _ => {}
         }
         if self.affects_preset() {
@@ -1293,6 +1307,8 @@ pub enum Page {
     /// The built-in music tracks, by situation: play one, turn any off
     /// (vanilla's `minecraft:audio/background_music` pools).
     Music,
+    /// The touch controls' settings. ios-port:
+    Touch,
 }
 #[derive(Clone, Debug, PartialEq)]
 enum Act {
@@ -1751,6 +1767,7 @@ fn horizon_page_tooltip(page: Page) -> Option<&'static str> {
         Page::Mods => "horizon.pages.mods.tooltip",
         Page::SplitSetup => "horizon.pages.split_setup.tooltip",
         Page::Music => "horizon.pages.music.tooltip",
+        Page::Touch => "horizon.pages.touch.tooltip", // ios-port:
         _ => return None,
     })
 }
@@ -2359,6 +2376,7 @@ impl OptionsUi {
             Page::SplitProfiles => "horizon.pages.split_profiles",
             Page::SplitSetup => "horizon.pages.split_setup",
             Page::Music => "horizon.pages.music",
+            Page::Touch => "horizon.pages.touch", // ios-port:
         }
     }
     fn scrollbar_x(&self, width: f32) -> f32 {
@@ -2566,6 +2584,10 @@ impl OptionsUi {
                         Row::Buttons(self.extra_button(s, crate::extras::Item::NoAi), None)
                     }),
                 )
+                // ios-port:
+                .chain(horizon_client_input::touch::available().then(|| {
+                    Row::Buttons(open("horizon.pages.open.touch", Page::Touch), None)
+                }))
                 .collect()
             }
             Page::Agent => {
@@ -2759,15 +2781,25 @@ impl OptionsUi {
                 let controls = vanilla_control_options();
                 rows.extend(pairs(&controls));
                 // Horizon's controller page, after vanilla's rows.
+                // ios-port: the touch controls' page beside it where touches play.
+                let touch = horizon_client_input::touch::available();
                 rows.push(Row::Buttons(
                     button(
                         0.0,
                         0.0,
-                        310.0,
+                        if touch { 150.0 } else { 310.0 },
                         tr("horizon.pages.open.controller"),
                         Act::Push(Page::Controller),
                     ),
-                    None,
+                    touch.then(|| {
+                        button(
+                            0.0,
+                            0.0,
+                            150.0,
+                            tr("horizon.pages.open.touch"),
+                            Act::Push(Page::Touch),
+                        )
+                    }),
                 ));
                 self.filter_option_rows(rows)
             }
@@ -2802,6 +2834,8 @@ impl OptionsUi {
                 ]));
                 rows
             }
+            // ios-port:
+            Page::Touch => pairs(&horizon_client_input::touch::TouchOpt::ALL.map(Opt::Touch)),
             Page::Mouse => pairs(MOUSE_OPTIONS),
             Page::Chat => pairs(&[
                 Opt::ChatVisibility,

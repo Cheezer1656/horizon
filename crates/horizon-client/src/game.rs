@@ -343,6 +343,8 @@ mod text_displays;
 mod titles;
 mod tnt;
 mod totem;
+// ios-port: touch controls.
+mod touch;
 mod trading;
 mod transient_blocks;
 mod trial_spawner;
@@ -2720,6 +2722,8 @@ struct Game<'a> {
     tool_highlight: horizon_client::hud_overlays::ToolHighlight,
     /// `Hud.autosaveIndicatorValue`.
     saving_indicator: horizon_client::hud_overlays::SavingIndicator,
+    // ios-port: touch controls.
+    touch: touch::Touches,
     /// This game's world is autosaving this tick (`MinecraftServer.isSaving`).
     autosaving: bool,
     /// `MinecraftServer.ticksUntilAutosave`: the ticks left before the next
@@ -8298,7 +8302,8 @@ impl Game<'_> {
         };
         let scale = HudBatch::new(size).scale;
         let was_grabbed = self.captured;
-        if self.options.offscreen && !self.split_window {
+        // ios-port: iOS has no pointer to grab: the grab is the game's own.
+        if (self.options.offscreen && !self.split_window) || cfg!(target_os = "ios") {
             // A genuinely hidden `--offscreen` run leaves the system pointer where
             // the person at the computer has it. Its grab is internal (an
             // agent turns the view with `mouse-move`).
@@ -9011,6 +9016,7 @@ impl Game<'_> {
             self.draw_sign_editor(&mut batch);
             self.draw_book(&mut batch);
         }
+        self.draw_touch(&mut batch); // ios-port: touch controls.
         batch
     }
     /// `native_screen_render_post` (`ScreenEvent.Render.Post`) for the open
@@ -17530,6 +17536,12 @@ impl Game<'_> {
         }
     }
     fn handle_window_event_inner(&mut self, event_loop: &dyn EventLoopCtl, mut event: WindowEvent) {
+        // ios-port: touch controls.
+        if let WindowEvent::Touch(touch) = &event
+            && self.touch_event(event_loop, touch)
+        {
+            return;
+        }
         if let WindowEvent::Focused(false) = &event {
             self.physical_keys.clear();
             self.physical_buttons.clear();
@@ -19012,6 +19024,7 @@ impl Game<'_> {
         if self.pending_save.is_some() {
             return;
         }
+        self.touch_frame(event_loop); // ios-port: touch controls.
         horizon_client::spans::time("pads", || self.poll_pads(event_loop));
         self.pause_if_inactive();
         if self.options.frames.is_some() && self.started.elapsed() > self.options.timeout {
@@ -19333,6 +19346,7 @@ impl<'a> Game<'a> {
             titles: Default::default(),
             tool_highlight: Default::default(),
             saving_indicator: Default::default(),
+            touch: Default::default(),
             autosaving: false,
             // `computeNextAutosaveInterval` at the clock's 20 ticks a second.
             ticks_until_autosave: 6000,

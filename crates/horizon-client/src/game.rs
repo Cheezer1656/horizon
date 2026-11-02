@@ -8016,7 +8016,8 @@ impl Game<'_> {
             // A controller's stick click acts as the key without setting the modifier: it is held
             // while the pad holds it (or its release waits for a tick), not when the keyboard says.
             let pad = self.pad.holds_action(&self.settings.controller, mapping);
-            if !held && !pad {
+            // ios-port: touch descend and sprint hold their keys without a Shift or Ctrl.
+            if !held && !pad && !self.touch_holds_latch(slot) {
                 self.toggles.0[slot].set_down(false, needs_toggle);
                 self.sync_toggle(slot);
             }
@@ -17484,6 +17485,14 @@ impl Game<'_> {
         if !ours {
             return;
         }
+        // ios-port: touch controls. Before the screens that drop input
+        // (loading, reloading packs, saving): a lift they swallowed would
+        // leave its finger down. The clicks it makes come back through here.
+        if let WindowEvent::Touch(touch) = &event
+            && self.touch_event(event_loop, touch)
+        {
+            return;
+        }
         follow_keymap(&mut event);
         // MacosUtil.setCtrlClickEmulatesRightClick: Control + left click is a right click.
         if let WindowEvent::MouseInput { state, button, .. } = &mut event
@@ -17540,12 +17549,6 @@ impl Game<'_> {
         }
     }
     fn handle_window_event_inner(&mut self, event_loop: &dyn EventLoopCtl, mut event: WindowEvent) {
-        // ios-port: touch controls.
-        if let WindowEvent::Touch(touch) = &event
-            && self.touch_event(event_loop, touch)
-        {
-            return;
-        }
         if let WindowEvent::Focused(false) = &event {
             self.physical_keys.clear();
             self.physical_buttons.clear();

@@ -17485,14 +17485,6 @@ impl Game<'_> {
         if !ours {
             return;
         }
-        // ios-port: touch controls. Before the screens that drop input
-        // (loading, reloading packs, saving): a lift they swallowed would
-        // leave its finger down. The clicks it makes come back through here.
-        if let WindowEvent::Touch(touch) = &event
-            && self.touch_event(event_loop, touch)
-        {
-            return;
-        }
         follow_keymap(&mut event);
         // MacosUtil.setCtrlClickEmulatesRightClick: Control + left click is a right click.
         if let WindowEvent::MouseInput { state, button, .. } = &mut event
@@ -17549,6 +17541,12 @@ impl Game<'_> {
         }
     }
     fn handle_window_event_inner(&mut self, event_loop: &dyn EventLoopCtl, mut event: WindowEvent) {
+        // ios-port: touch controls.
+        if let WindowEvent::Touch(touch) = &event
+            && self.touch_event(event_loop, touch)
+        {
+            return;
+        }
         if let WindowEvent::Focused(false) = &event {
             self.physical_keys.clear();
             self.physical_buttons.clear();
@@ -21416,6 +21414,8 @@ struct Loading {
     ui_at: Option<Instant>,
     title_drawn: bool,
     menu: startup_menu::StartupMenu,
+    // ios-port: touches on the title while the game loads.
+    touch: touch::Touches,
     error: Option<Box<dyn std::error::Error>>,
 }
 /// How long the handoff waits for the first title frame before building the
@@ -21525,6 +21525,12 @@ impl Loading {
         if self.window.as_ref().is_none_or(|w| w.id() != id) {
             return;
         }
+        // ios-port: touch controls.
+        if let WindowEvent::Touch(touch) = &event
+            && self.touch_event(event_loop, touch)
+        {
+            return;
+        }
         follow_keymap(&mut event);
         if let Err(error) = self.menu_event(event_loop, event) {
             self.error = Some(error);
@@ -21587,6 +21593,7 @@ impl Loading {
             return;
         }
         self.poll_menu_realms(event_loop);
+        self.touch_frame(event_loop); // ios-port: touch controls.
         if let Some(w) = &self.window {
             if self.options.as_ref().is_some_and(|o| o.offscreen) {
                 self.draw();
@@ -21870,6 +21877,7 @@ fn run_loading(
         ui_at: None,
         title_drawn: false,
         menu,
+        touch: Default::default(),
         error: None,
     };
     let mut app = App::Loading(Box::new(loading));

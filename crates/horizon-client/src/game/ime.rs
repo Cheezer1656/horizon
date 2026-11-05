@@ -14,7 +14,11 @@ impl Game<'_> {
         if self.dialog_open() {
             return self.dialog_has_text_field();
         }
-        if let Some(title) = self.title.as_mut() {
+        // Settings opened from the title screen draw over it with the title
+        // still set: their search boxes are the focus then, not its fields.
+        if let Some(title) = self.title.as_mut()
+            && self.screen != Screen::Options
+        {
             // A caret field, an append-only one (`focused_field`), or a game
             // rule's box (`has_caret_field` asks the rules screen itself, and
             // `title_edit` types into it).
@@ -122,7 +126,7 @@ impl Game<'_> {
         if self.dialog_type(&text) {
             return;
         }
-        if self.title.is_some() {
+        if self.title.is_some() && self.screen != Screen::Options {
             self.title_edit(Some(&text), false);
         } else if self.book.is_some() {
             self.book_input(None, Some(&text));

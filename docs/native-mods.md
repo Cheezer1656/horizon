@@ -62,6 +62,30 @@ Use `"property": "example:charged"` with both `on_true` and `on_false` in the it
 `minecraft:condition` node. Custom special model renderers are not supplied by this hook.
 Bundles need `"hooks": 385` once this pending hook is stamped.
 
+## Chroma text
+
+`Style::chroma` (`horizon_client::text::Chroma`) turns the colour of a `Text` into a rainbow that sweeps across the
+screen and moves with time. Put it on a span's style, or on a whole `Text` with `with_style`. It applies wherever the
+game draws a `Text` with its font: the HUD and screens (`HudBatch::text_styled`), tooltips, name tags
+(`native_render_name_tag`), world primitives text and text displays. The glyphs, their shadows and their underline
+and strikethrough lines are all recoloured. It is a client effect only; it is not in the component JSON, so it never
+reaches the server. Block entity text from `native_draw_text` does not honour it.
+
+| Field | Meaning |
+|---|---|
+| `size` | GUI pixels along `direction` for one full turn of hue; zero or less leaves only the brightness |
+| `speed` | Full hue turns per second (wall clock); negative sweeps the other way |
+| `saturation` | 0 (grey) to 1 (full rainbow) |
+| `direction` | The sweep's axis in GUI pixels, y down: the hue grows with `x * d[0] + y * d[1]`. `[1.0, 1.0]` sweeps towards the lower right, `[1.0, -1.0]` towards the upper right |
+
+The hue at a point is `fract((x * d[0] + y * d[1]) / size - speed * seconds)`, and the colour is
+`hsb2rgb_smooth(hue, saturation, brightness)` with the brightness (the largest channel) of the glyph's own colour, the
+alpha unchanged. Each glyph quad is coloured at its four corners, so the sweep is smooth across a glyph. A shadow
+takes the same hue at its own (quarter) brightness. Legacy `§` colour codes change the brightness and keep the chroma;
+`§r` returns to the span's style, chroma included. Positions are the batch's when the text is drawn: text a mod moves afterwards (`scale_since`) carries
+its colours with it, and world text sweeps in the text's own plane. `HudBatch::chroma_seconds` sets the clock for a
+reproducible frame. Cost: one pass over the vertices of a chroma glyph; text without it is untouched.
+
 ## Item frame rendering
 
 `native_render_item_in_frame(entity_id, pos, stack, canceled)` runs before a visible item frame draws its item or map, including glow and invisible frames. Set `canceled` to hide the item without hiding the frame. Bundles need "hooks": 361.

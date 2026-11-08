@@ -1706,6 +1706,9 @@ pub struct HudBatch {
     pub blur_at: u32,
     /// Player object profiles encountered while painting text this frame.
     pub inline_profiles: Vec<serde_json::Value>,
+    /// The animation clock of chroma text ([`crate::text::Chroma`]), in seconds; the
+    /// wall clock since the first chroma glyph when unset. Set it for a reproducible frame.
+    pub chroma_seconds: Option<f64>,
 }
 /// How a run of HUD vertices blends and tests depth.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -1735,6 +1738,14 @@ pub struct EndPortalFill {
     pub sprites: [[f32; 4]; 2],
     pub game_time: f32,
 }
+/// Seconds since chroma text was first drawn: the clock of its animation.
+fn chroma_clock() -> f64 {
+    static START: OnceLock<std::time::Instant> = OnceLock::new();
+    START
+        .get_or_init(std::time::Instant::now)
+        .elapsed()
+        .as_secs_f64()
+}
 pub fn rgba(r: u8, g: u8, b: u8, a: u8) -> u32 {
     u32::from(a) << 24 | u32::from(b) << 16 | u32::from(g) << 8 | u32::from(r)
 }
@@ -1763,6 +1774,20 @@ impl HudBatch {
             game_time: 0.0,
             blur_at: 0,
             inline_profiles: Vec::new(),
+            chroma_seconds: None,
+        }
+    }
+    /// Colour the vertices added since `start` as `chroma` says: each corner takes the hue at
+    /// its position (GUI pixels as the batch holds them now) with the brightness of the colour
+    /// it had, so the sweep runs smoothly across a glyph, its shadow and its lines. Text drawn
+    /// in the world sweeps in the text's own plane.
+    pub fn chroma_since(&mut self, start: usize, chroma: &crate::text::Chroma) {
+        let seconds = self.chroma_seconds.unwrap_or_else(chroma_clock);
+        for v in &mut self.vertices[start..] {
+            let [r, g, b, a] = v.color.to_le_bytes();
+            let brightness = f32::from(r.max(g).max(b)) / 255.0;
+            let [r, g, b] = chroma.rgb(v.pos[0], v.pos[1], seconds, brightness);
+            v.color = rgba(r, g, b, a);
         }
     }
     /// Draw the vertices added since `start` with the inverting blend.
@@ -2235,6 +2260,7 @@ impl HudBatch {
                 first,
                 advance,
                 object.cloned(),
+                style.chroma,
             ));
             cursor += advance;
         }
@@ -2269,6 +2295,7 @@ impl HudBatch {
                 first,
                 advance,
                 object,
+                chroma,
             ) in &glyphs
             {
                 let shadow_color = if let Some(argb) = custom_shadow {
@@ -2369,6 +2396,9 @@ impl HudBatch {
                     self.rect_uv(x0, py + 8.0, px + *advance - x0, 1.0, white, col);
                 }
                 lift(self, start, base + 0.01);
+                if let Some(chroma) = chroma {
+                    self.chroma_since(glyph, chroma);
+                }
                 if !world {
                     for v in &mut self.vertices[glyph..] {
                         v.text = 1;
@@ -4633,6 +4663,7 @@ texture=wide",
                 game_time: 0.0,
                 blur_at: 0,
                 inline_profiles: Vec::new(),
+                chroma_seconds: None,
             };
             for (image_width, image_height) in [(195, 136), (176, 166), (176, 222)] {
                 assert_eq!(
@@ -4644,5 +4675,85 @@ texture=wide",
                 );
             }
         }
+    }
+    /// Chroma text takes a hue by corner position and keeps each colour's brightness; plain
+    /// text and the same text without the flag draw as before.
+    #[test]
+    fn chroma_text_recolours_corners_by_position_and_keeps_brightness() {
+        use crate::text::{Chroma, Style, Text};
+        let atlas = HudAtlas::build(Path::new("/nonexistent/horizon-test-assets")).unwrap();
+        let chroma = Chroma {
+            size: 40.0,
+            speed: 1.0,
+            saturation: 1.0,
+            direction: [1.0, 1.0],
+        };
+        let draw = |style: Style, color: u32, shadow: bool| {
+            let mut batch = HudBatch::new([640, 480]);
+            batch.chroma_seconds = Some(0.0);
+            batch.text_styled(&atlas, &Text::styled("Hi", style), 4.0, 6.0, color, shadow);
+            batch
+        };
+        let plain = draw(Style::default(), rgba(255, 255, 255, 255), false);
+        let rainbow = draw(
+            Style {
+                chroma: Some(chroma),
+                ..Style::default()
+            },
+            rgba(255, 255, 255, 255),
+            false,
+        );
+        assert_eq!(plain.vertices.len(), rainbow.vertices.len());
+        assert!(
+            plain
+                .vertices
+                .iter()
+                .all(|v| v.color == rgba(255, 255, 255, 255))
+        );
+        for (p, r) in plain.vertices.iter().zip(&rainbow.vertices) {
+            assert_eq!(p.pos, r.pos);
+            let [red, green, blue, alpha] = r.color.to_le_bytes();
+            assert_eq!(alpha, 255);
+            // White is full brightness: the strongest channel is 255.
+            assert_eq!(red.max(green).max(blue), 255);
+        }
+        let colours: HashSet<u32> = rainbow.vertices.iter().map(|v| v.color).collect();
+        assert!(colours.len() > 1, "the hue changes across the text");
+        // Half-bright text stays half bright, and its shadow a quarter of that.
+        let dim = draw(
+            Style {
+                chroma: Some(chroma),
+                ..Style::default()
+            },
+            rgba(128, 128, 128, 200),
+            true,
+        );
+        for v in &dim.vertices {
+            let [r, g, b, a] = v.color.to_le_bytes();
+            assert_eq!(a, 200);
+            let top = r.max(g).max(b);
+            assert!(top == 128 || top == 32, "{top}");
+        }
+        // The sweep moves with the clock.
+        let mut later = HudBatch::new([640, 480]);
+        later.chroma_seconds = Some(0.25);
+        later.text_styled(
+            &atlas,
+            &Text::styled(
+                "Hi",
+                Style {
+                    chroma: Some(chroma),
+                    ..Style::default()
+                },
+            ),
+            4.0,
+            6.0,
+            rgba(255, 255, 255, 255),
+            false,
+        );
+        assert_ne!(
+            later.vertices.iter().map(|v| v.color).collect::<Vec<_>>(),
+            rainbow.vertices.iter().map(|v| v.color).collect::<Vec<_>>()
+        );
     }
 }

@@ -85,6 +85,71 @@ impl InlineObject {
     }
 }
 
+/// An animated rainbow on text (`Style::chroma`): the hue sweeps across the
+/// screen along `direction` and moves with time, and each glyph keeps its own
+/// colour's brightness, as SkyHanni's chroma shader does. A client-side
+/// effect: it is not part of the vanilla `Component` JSON, so it never
+/// reaches the server or a saved message. API @API:chroma_text@.
+#[derive(Clone, Copy, Debug)]
+pub struct Chroma {
+    /// GUI pixels along `direction` for one full turn of hue. Zero or less
+    /// leaves the colour as it is.
+    pub size: f32,
+    /// Full hue turns a second; negative sweeps the other way.
+    pub speed: f32,
+    /// 0 is grey (the colour's brightness only), 1 the full rainbow.
+    pub saturation: f32,
+    /// The sweep's axis in GUI pixels, y down: the hue at a point grows with
+    /// `x * direction[0] + y * direction[1]`. `[1.0, 1.0]` sweeps towards the
+    /// lower right, `[1.0, -1.0]` towards the upper right.
+    pub direction: [f32; 2],
+}
+impl Chroma {
+    /// The hue (0..1) at a point in GUI pixels, `seconds` into the animation.
+    pub fn hue(&self, x: f32, y: f32, seconds: f64) -> f32 {
+        let along = x * self.direction[0] + y * self.direction[1];
+        let turns = f64::from(along / self.size) - f64::from(self.speed) * seconds;
+        turns.rem_euclid(1.0) as f32
+    }
+    /// The colour at a point for a glyph of `brightness` (0..1): the shader's
+    /// `hsb2rgb_smooth(hue, saturation, brightness)`, as 0..=255 red, green and blue.
+    pub fn rgb(&self, x: f32, y: f32, seconds: f64, brightness: f32) -> [u8; 3] {
+        if self.size <= 0.0 || !self.size.is_finite() {
+            let v = (brightness.clamp(0.0, 1.0) * 255.0).round() as u8;
+            return [v, v, v];
+        }
+        let hue = self.hue(x, y, seconds);
+        let saturation = self.saturation.clamp(0.0, 1.0);
+        let channel = |offset: f32| {
+            let c = ((hue * 6.0 + offset).rem_euclid(6.0) - 3.0).abs() - 1.0;
+            let c = c.clamp(0.0, 1.0);
+            // Cubic smoothing.
+            let c = c * c * (3.0 - 2.0 * c);
+            let mixed = 1.0 + (c - 1.0) * saturation;
+            ((brightness.clamp(0.0, 1.0) * mixed) * 255.0)
+                .round()
+                .clamp(0.0, 255.0) as u8
+        };
+        [channel(0.0), channel(4.0), channel(2.0)]
+    }
+}
+// Compared by bits, so a NaN equals itself and `Style` stays `Eq`.
+impl PartialEq for Chroma {
+    fn eq(&self, other: &Self) -> bool {
+        let bits = |c: &Chroma| {
+            [
+                c.size.to_bits(),
+                c.speed.to_bits(),
+                c.saturation.to_bits(),
+                c.direction[0].to_bits(),
+                c.direction[1].to_bits(),
+            ]
+        };
+        bits(self) == bits(other)
+    }
+}
+impl Eq for Chroma {}
+
 /// Text style; `None` fields inherit from the enclosing style.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Style {
@@ -110,6 +175,9 @@ pub struct Style {
     pub font: Option<String>,
     /// Content metadata for a single U+FFFC object span; never inherited.
     pub inline_object: Option<InlineObject>,
+    /// An animated rainbow over the glyphs ([`Chroma`]); client only, not in
+    /// the component JSON.
+    pub chroma: Option<Chroma>,
 }
 /// A style's `font` field: an identifier (`alt` is `minecraft:alt`).
 pub fn font_id(v: &Value) -> Option<String> {
@@ -147,6 +215,7 @@ impl Style {
         if self.font.is_none() {
             self.font.clone_from(&base.font);
         }
+        self.chroma = self.chroma.or(base.chroma);
     }
     pub fn is_bold(&self) -> bool {
         self.bold == Some(true)
@@ -823,6 +892,71 @@ mod tests {
         assert_eq!(t.spans[0].style.color, Some(RED));
         assert_eq!(t.spans[1].style.color, Some(GOLD));
         assert_eq!(t.slice(1, 2).plain(), "y");
+    }
+    fn rainbow() -> Chroma {
+        Chroma {
+            size: 100.0,
+            speed: 0.5,
+            saturation: 1.0,
+            direction: [1.0, 1.0],
+        }
+    }
+    #[test]
+    fn chroma_sweeps_along_its_direction_and_moves_with_time() {
+        let c = rainbow();
+        assert_eq!(c.hue(0.0, 0.0, 0.0), 0.0);
+        assert!((c.hue(30.0, 20.0, 0.0) - 0.5).abs() < 1e-6);
+        // A full size along the axis is a full turn; time slides the hue back.
+        assert!(c.hue(100.0, 0.0, 0.0) < 1e-6);
+        assert!((c.hue(0.0, 0.0, 0.5) - 0.75).abs() < 1e-6);
+        let up = Chroma {
+            direction: [1.0, -1.0],
+            ..c
+        };
+        assert!((up.hue(30.0, 20.0, 0.0) - 0.1).abs() < 1e-6);
+    }
+    #[test]
+    fn chroma_colours_keep_brightness_and_saturation_picks_the_grey() {
+        let c = rainbow();
+        // Hue 0 is red, a third in is green, two thirds blue.
+        assert_eq!(c.rgb(0.0, 0.0, 0.0, 1.0), [255, 0, 0]);
+        assert_eq!(c.rgb(100.0 / 3.0, 0.0, 0.0, 1.0), [0, 255, 0]);
+        assert_eq!(c.rgb(200.0 / 3.0, 0.0, 0.0, 1.0), [0, 0, 255]);
+        assert_eq!(c.rgb(0.0, 0.0, 0.0, 0.5), [128, 0, 0]);
+        let grey = Chroma {
+            saturation: 0.0,
+            ..c
+        };
+        assert_eq!(grey.rgb(10.0, 0.0, 0.0, 0.5), [128, 128, 128]);
+        // No size: no sweep, only the brightness.
+        let flat = Chroma { size: 0.0, ..c };
+        assert_eq!(flat.rgb(10.0, 0.0, 0.0, 1.0), [255, 255, 255]);
+    }
+    #[test]
+    fn chroma_is_inherited_by_unset_spans_and_kept_by_a_colour_code() {
+        let c = rainbow();
+        let text = Text::literal("a")
+            .append(Text::colored("b", RED))
+            .with_style(&Style {
+                chroma: Some(c),
+                ..Style::default()
+            });
+        assert!(text.spans.iter().all(|s| s.style.chroma == Some(c)));
+        let coded = Text::styled(
+            "§cx",
+            Style {
+                chroma: Some(c),
+                ..Style::default()
+            },
+        );
+        let resolved = coded.resolved();
+        assert_eq!(resolved.spans[0].style.color, Some(RED));
+        assert_eq!(resolved.spans[0].style.chroma, Some(c));
+        // Not part of the component JSON.
+        assert_eq!(
+            text.component(),
+            json!({"text": "a", "extra": [{"text": "b", "color": "red"}]})
+        );
     }
     #[test]
     fn resolved_borrows_clean_text_and_restyles_codes() {

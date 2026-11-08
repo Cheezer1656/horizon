@@ -1,0 +1,8 @@
+{
+  "hooks": [],
+  "rust_summary": "chroma text (`Style::chroma`): an animated rainbow a mod puts on a `Text`.",
+  "doc_summary": "chroma text: `Style::chroma` (`horizon_client::text::Chroma { size, speed, saturation, direction }`) sweeps an animated rainbow across a `Text`'s glyphs, their shadows and lines wherever the game draws it (HUD, tooltips, name tags, world primitives text), each glyph keeping its colour's brightness ([Chroma text](#chroma-text)). Bundles need \"hooks\": @API:chroma_text@.",
+  "comments": [
+    "crates/horizon-client-core/src/text.rs"
+  ]
+}

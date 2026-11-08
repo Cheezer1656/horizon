@@ -3801,6 +3801,19 @@ chest's own slots, then the player's inventory, then the hotbar; an empty slot i
 counts the slots, this lists them. It is `None` on a server, while no server-opened menu is up (the window's own
 inventory, creative) and for a menu whose slots the client doesn't lay out (a lectern).
 
+#### HUD state on a client
+
+On a client (API @API:client_hud_state@) four reads give what the window's HUD holds, so a mod need not rebuild it from
+`client_packet`. Each is empty (`None`, an empty list) on a server and before a window is attached. They read the state
+the server last sent, whether or not the layer is hidden (F1, `native_gui_layer_pre`), and do no work beyond cloning it.
+
+| Read | Gives |
+|---|---|
+| `host.client_sidebar()` | `Option<NativeClientSidebar>`: the `title` and `lines` (`name`, `score`, `value`) of the objective in the player's team's sidebar slot, else the sidebar's. `None` when no sidebar is up. Lines are in drawn order (highest score first, at most 15, `#` holders left out). `name` is the holder's name with its team prefix and suffix applied, as the server sent it (a legacy `§` code is still a code in the text); `score` is the number format's text (empty when blank). |
+| `host.client_tab_list()` | `NativeClientTabList`: the `header` and `footer` (`None` when empty) and the listed `players` (`uuid`, `name`, `display`) in the list's order (at most 80). `display` is the server's display name, else the team prefix, name and suffix. It reads the same whether or not the player-list key is held. |
+| `host.client_titles()` | `NativeClientTitles`: the `title`, `subtitle` and `action_bar` on screen now. Each is `None` once its timer has run out; the subtitle shows only with a title. |
+| `host.client_boss_bars()` | `Vec<NativeClientBossBar>`: `name` and `progress` (0 to 1, as drawn), in the order the server added the bars. |
+
 Each read is a `Host` method too (`host.entity_position(entity)`): a helper whose catalog entry names a `receiver`
 (`entity`, `level`) also becomes a method of that handle.
 

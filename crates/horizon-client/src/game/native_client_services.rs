@@ -5,9 +5,11 @@ use horizon_client::{
     collisions::SceneCollisions,
     hud::{HudBatch, rgba},
     hud_layout::GuiDraw,
+    hud_overlays,
     items::ItemStack,
     mod_api::Text,
     net::FRIEND,
+    tab_list,
 };
 use horizon_core::geometry::Vec3;
 #[cfg(feature = "friends")]
@@ -215,6 +217,66 @@ pub struct NativeClientProfile {
     pub uuid: u128,
     pub name: String,
     pub skin: String,
+}
+
+/// One line of the scoreboard sidebar.
+#[derive(Clone, Debug, Default)]
+#[non_exhaustive]
+pub struct NativeClientSidebarLine {
+    /// The holder's name with its team's prefix and suffix, as the server sent it.
+    pub name: Text,
+    /// The score as the objective's number format shows it; empty when blank.
+    pub score: Text,
+    pub value: i32,
+}
+
+/// The scoreboard sidebar the window shows.
+#[derive(Clone, Debug, Default)]
+#[non_exhaustive]
+pub struct NativeClientSidebar {
+    pub title: Text,
+    /// Top to bottom, as drawn: at most 15, hidden (`#...`) holders left out.
+    pub lines: Vec<NativeClientSidebarLine>,
+}
+
+/// One player the player list shows.
+#[derive(Clone, Debug, Default)]
+#[non_exhaustive]
+pub struct NativeClientTabEntry {
+    pub uuid: u128,
+    /// The profile name (the score holder and team member name).
+    pub name: String,
+    /// The name as the list draws it: the server's display name, else the team's
+    /// prefix, name and suffix.
+    pub display: Text,
+}
+
+/// The player list the window holds, shown or not.
+#[derive(Clone, Debug, Default)]
+#[non_exhaustive]
+pub struct NativeClientTabList {
+    pub header: Option<Text>,
+    pub footer: Option<Text>,
+    /// In the list's order (at most 80).
+    pub players: Vec<NativeClientTabEntry>,
+}
+
+/// The title, subtitle and action bar the window is showing.
+#[derive(Clone, Debug, Default)]
+#[non_exhaustive]
+pub struct NativeClientTitles {
+    pub title: Option<Text>,
+    pub subtitle: Option<Text>,
+    pub action_bar: Option<Text>,
+}
+
+/// A boss bar the window shows.
+#[derive(Clone, Debug, Default)]
+#[non_exhaustive]
+pub struct NativeClientBossBar {
+    pub name: Text,
+    /// 0 to 1, as drawn (the lerped value).
+    pub progress: f32,
 }
 
 impl Game<'_> {
@@ -553,6 +615,80 @@ impl Game<'_> {
     pub(super) fn native_is_key_down(&self, key: KeyCode) -> bool {
         self.physical_keys.contains(&key)
     }
+    /// The sidebar the window shows (the objective in its team's sidebar slot,
+    /// else the sidebar's), as the HUD lists it. None when there is none. API
+    /// @API:client_hud_state@.
+    pub(super) fn native_client_sidebar(&self) -> Option<NativeClientSidebar> {
+        if !self.native_window() {
+            return None;
+        }
+        let objective = self.sidebar_objective()?;
+        let lines = hud_overlays::sidebar_rows(&self.score.board, objective)
+            .into_iter()
+            .map(|row| NativeClientSidebarLine {
+                name: row.name,
+                score: row.score,
+                value: row.value,
+            })
+            .collect();
+        Some(NativeClientSidebar {
+            title: objective.display_text(),
+            lines,
+        })
+    }
+    /// The player list's header, footer and players in the order it draws them,
+    /// whether or not the key is held. Empty before a window is attached. API
+    /// @API:client_hud_state@.
+    pub(super) fn native_client_tab_list(&self) -> NativeClientTabList {
+        if !self.native_window() {
+            return NativeClientTabList::default();
+        }
+        let players = self
+            .remote_listed_players()
+            .unwrap_or_else(|| self.local_tab_list());
+        let board = &self.score.board;
+        NativeClientTabList {
+            header: self.tab_list.header.clone(),
+            footer: self.tab_list.footer.clone(),
+            players: tab_list::sorted_players(&players, board)
+                .into_iter()
+                .map(|p| NativeClientTabEntry {
+                    uuid: p.uuid,
+                    name: p.name.clone(),
+                    display: tab_list::name_for_display(p, board),
+                })
+                .collect(),
+        }
+    }
+    /// The title, subtitle and action bar on screen now: a title or action bar
+    /// whose time has run out reads as None, and a subtitle shows only with
+    /// its title, as the HUD draws them. API @API:client_hud_state@.
+    pub(super) fn native_client_titles(&self) -> NativeClientTitles {
+        let t = &self.titles;
+        if !self.native_window() {
+            return NativeClientTitles::default();
+        }
+        let title = t.title.clone().filter(|_| t.time > 0);
+        NativeClientTitles {
+            subtitle: title.as_ref().and(t.subtitle.clone()),
+            title,
+            action_bar: t.overlay.clone().filter(|_| t.overlay_time > 0),
+        }
+    }
+    /// The boss bars the window shows, in the order the server added them. API @API:client_hud_state@.
+    pub(super) fn native_client_boss_bars(&self) -> Vec<NativeClientBossBar> {
+        if !self.native_window() {
+            return Vec::new();
+        }
+        self.boss_overlay
+            .bars(horizon_client::boss_overlay::now_millis())
+            .into_iter()
+            .map(|b| NativeClientBossBar {
+                name: b.name,
+                progress: b.progress,
+            })
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -887,5 +1023,147 @@ mod client_tests {
         assert!(game.client_texture("inside").is_some());
         assert!(game.client_texture("../../../outside").is_none());
         std::fs::remove_dir_all(&packs).unwrap();
+    }
+}
+
+/// A window joined to a server through memory, fed the server's packets as it
+/// would receive them: what its native mods read of the HUD state.
+#[cfg(test)]
+mod hud_state_tests {
+    use crate::game::{Audio, Game, Options, Progress, Settings, load_resources};
+    use horizon_protocol::packets::play::{self, Clientbound as C};
+    use horizon_world::nbt::Tag;
+
+    fn s(text: &str) -> Tag {
+        Tag::String(text.into())
+    }
+
+    #[test]
+    #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+    fn a_client_reads_the_hud_state_the_server_sent_it() {
+        let root = std::path::PathBuf::from(std::env::var_os("HORIZON_TEST_RESOURCES").unwrap());
+        let settings = Settings::default();
+        let loaded = load_resources(
+            root.clone(),
+            None,
+            &root,
+            &settings,
+            std::time::Instant::now(),
+            false,
+            true,
+            &Progress::new(),
+            &mut |_, _| unreachable!(),
+        )
+        .unwrap();
+        let mut options = Options::parse(std::iter::empty()).unwrap().unwrap();
+        options.resources = root.clone();
+        let mut game = Game::new(
+            &loaded.resources,
+            loaded.pack,
+            loaded.gui.unwrap(),
+            options,
+            settings,
+            Audio::silent(&root),
+            None,
+        )
+        .unwrap();
+        let (pipe, _server) = horizon_protocol::connection::Pipe::pair();
+        game.connect_local(pipe, "Steve").unwrap();
+
+        // Nothing shown yet.
+        assert!(game.native_client_sidebar().is_none());
+        assert!(game.native_client_tab_list().players.is_empty());
+        assert!(game.native_client_titles().title.is_none());
+        assert!(game.native_client_boss_bars().is_empty());
+
+        // A sidebar whose lines come from team prefixes and suffixes.
+        game.handle_packet(C::SetObjective(play::SetObjective {
+            name: "side".into(),
+            method: 0,
+            display: Some((s("SKYBLOCK"), 0, None)),
+        }))
+        .unwrap();
+        game.handle_packet(C::SetDisplayObjective(play::SetDisplayObjective {
+            slot: 1,
+            objective: "side".into(),
+        }))
+        .unwrap();
+        let team = |name: &str, method: i8, prefix: &str, players: &[&str]| {
+            C::SetPlayerTeam(play::SetPlayerTeam {
+                name: name.into(),
+                method,
+                parameters: (method == 0).then(|| play::TeamParameters {
+                    display_name: s(name),
+                    prefix: s(prefix),
+                    suffix: s(""),
+                    name_tag_visibility: 0,
+                    collision_rule: 0,
+                    color: None,
+                    options: 0,
+                }),
+                players: players.iter().map(|p| (*p).into()).collect(),
+            })
+        };
+        game.handle_packet(team("team_1", 0, "Purse: ", &["§0"]))
+            .unwrap();
+        for (owner, score) in [("§0", 2), ("§1", 1)] {
+            game.handle_packet(C::SetScore(play::SetScore {
+                owner: owner.into(),
+                objective: "side".into(),
+                score,
+                display: None,
+                number_format: None,
+            }))
+            .unwrap();
+        }
+        let sidebar = game.native_client_sidebar().expect("a sidebar is up");
+        assert_eq!(sidebar.title.plain(), "SKYBLOCK");
+        assert_eq!(sidebar.lines.len(), 2);
+        assert_eq!(sidebar.lines[0].name.plain(), "Purse: §0");
+        assert_eq!(sidebar.lines[0].value, 2);
+
+        // Header, footer, titles and an action bar.
+        game.handle_packet(C::TabList(play::TabList {
+            header: s("Welcome"),
+            footer: s(""),
+        }))
+        .unwrap();
+        let tab = game.native_client_tab_list();
+        assert_eq!(tab.header.map(|h| h.plain()).as_deref(), Some("Welcome"));
+        assert!(tab.footer.is_none());
+        game.handle_packet(C::SetSubtitleText(play::Text { text: s("sub") }))
+            .unwrap();
+        // A subtitle alone is not shown: the HUD draws it under a title.
+        assert!(game.native_client_titles().subtitle.is_none());
+        game.handle_packet(C::SetTitleText(play::Text { text: s("big") }))
+            .unwrap();
+        game.handle_packet(C::SetActionBarText(play::Text { text: s("bar") }))
+            .unwrap();
+        let titles = game.native_client_titles();
+        assert_eq!(titles.title.map(|t| t.plain()).as_deref(), Some("big"));
+        assert_eq!(titles.subtitle.map(|t| t.plain()).as_deref(), Some("sub"));
+        assert_eq!(titles.action_bar.map(|t| t.plain()).as_deref(), Some("bar"));
+        game.titles.clear();
+        game.titles.overlay_time = 0;
+        let titles = game.native_client_titles();
+        assert!(titles.title.is_none() && titles.action_bar.is_none());
+
+        // A boss bar.
+        game.handle_packet(C::BossEvent(play::BossEvent {
+            id: 1,
+            action: play::BossAction::Add {
+                name: s("Dragon"),
+                progress: 0.5,
+                color: 5,
+                overlay: 0,
+                darken: false,
+                music: false,
+                fog: false,
+            },
+        }))
+        .unwrap();
+        let bars = game.native_client_boss_bars();
+        assert_eq!(bars.len(), 1);
+        assert_eq!(bars[0].name.plain(), "Dragon");
     }
 }

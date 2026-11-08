@@ -1,0 +1,26 @@
+{
+  "hooks": [],
+  "helpers": [
+    {
+      "name": "client_sidebar",
+      "target": "horizon_client::game::native_client_services::Game<'_>::native_client_sidebar"
+    },
+    {
+      "name": "client_tab_list",
+      "target": "horizon_client::game::native_client_services::Game<'_>::native_client_tab_list"
+    },
+    {
+      "name": "client_titles",
+      "target": "horizon_client::game::native_client_services::Game<'_>::native_client_titles"
+    },
+    {
+      "name": "client_boss_bars",
+      "target": "horizon_client::game::native_client_services::Game<'_>::native_client_boss_bars"
+    }
+  ],
+  "rust_summary": "reads of the HUD state a client holds: the scoreboard sidebar, the player list, the title, subtitle and action bar, and the boss bars (`native_client_sidebar`, `native_client_tab_list`, `native_client_titles`, `native_client_boss_bars`).",
+  "doc_summary": "on a client, `host.client_sidebar()`, `host.client_tab_list()`, `host.client_titles()` and `host.client_boss_bars()` read what the window's HUD holds: the sidebar's title and lines with team prefix and suffix applied, the player list's header, footer and names in its order, the title, subtitle and action bar on screen, and the boss bars with their progress. Bundles need \"hooks\": @API:client_hud_state@.",
+  "comments": [
+    "crates/horizon-client/src/game/native_client_services.rs"
+  ]
+}

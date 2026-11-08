@@ -668,17 +668,24 @@ pub fn compare_ignore_case(a: &str, b: &str) -> Ordering {
     x.len().cmp(&y.len())
 }
 
-/// `Hud.displayScoreboardSidebar` for `objective`; `background` and
-/// `header` are `Options.getBackgroundColor(0.3F)` and `(0.4F)`.
-pub fn sidebar(
-    w: i32,
-    h: i32,
+/// One line of the scoreboard sidebar, as the HUD lists it. The texts are
+/// the unresolved components: legacy `§` codes in a literal are still codes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SidebarRow {
+    /// The score holder's name with its team's prefix and suffix.
+    pub name: Text,
+    /// The score as the objective's number format shows it; empty when blank.
+    pub score: Text,
+    pub value: i32,
+}
+
+/// The lines `Hud.displayScoreboardSidebar` lists for `objective`, top to
+/// bottom: hidden holders (`#...`) left out, highest score first, owners
+/// compared ignoring case, at most 15.
+pub fn sidebar_rows(
     board: &crate::scoreboard::Scoreboard,
     objective: &crate::scoreboard::Objective,
-    font: &Font,
-    background: u32,
-    header: u32,
-) -> Vec<GuiDraw> {
+) -> Vec<SidebarRow> {
     use crate::scoreboard::NumberFormat;
     let format = objective.format_or_default(NumberFormat::sidebar_default());
     let mut entries: Vec<_> = board
@@ -693,17 +700,37 @@ pub fn sidebar(
             .then_with(|| compare_ignore_case(&a.owner, &b.owner))
     });
     entries.truncate(15);
-    // Font draws each literal through StringDecomposer.iterateFormatted:
-    // legacy `§` codes style what follows and are not drawn.
-    let rows: Vec<(Text, Text, i32)> = entries
+    entries
         .iter()
-        .map(|e| {
-            let name = match board.players_team(&e.owner) {
+        .map(|e| SidebarRow {
+            name: match board.players_team(&e.owner) {
                 Some(team) => team.formatted_name(e.owner_name()),
                 None => e.owner_name(),
-            }
-            .resolve_legacy();
-            let score = e.format_value(&format).resolve_legacy();
+            },
+            score: e.format_value(&format),
+            value: e.value,
+        })
+        .collect()
+}
+
+/// `Hud.displayScoreboardSidebar` for `objective`; `background` and
+/// `header` are `Options.getBackgroundColor(0.3F)` and `(0.4F)`.
+pub fn sidebar(
+    w: i32,
+    h: i32,
+    board: &crate::scoreboard::Scoreboard,
+    objective: &crate::scoreboard::Objective,
+    font: &Font,
+    background: u32,
+    header: u32,
+) -> Vec<GuiDraw> {
+    // Font draws each literal through StringDecomposer.iterateFormatted:
+    // legacy `§` codes style what follows and are not drawn.
+    let rows: Vec<(Text, Text, i32)> = sidebar_rows(board, objective)
+        .into_iter()
+        .map(|row| {
+            let name = row.name.resolve_legacy();
+            let score = row.score.resolve_legacy();
             let score_width = width(font, &score);
             (name, score, score_width)
         })
@@ -1479,5 +1506,38 @@ mod boss_bar_room_tests {
                 .max();
             assert_eq!(bottom, Some(boss_bars_bottom(h, bars.len())), "height {h}");
         }
+    }
+}
+
+#[cfg(test)]
+mod sidebar_row_tests {
+    use super::*;
+    use crate::scoreboard::{RenderType, Scoreboard, literal};
+
+    #[test]
+    fn rows_are_listed_top_down_with_team_prefix_and_suffix() {
+        let mut board = Scoreboard::default();
+        board.add_objective(
+            "side",
+            "dummy",
+            literal("Title"),
+            RenderType::Integer,
+            false,
+            None,
+        );
+        for (holder, value) in [("b", 3), ("a", 3), ("c", 9), ("#hidden", 20)] {
+            board.set(holder, "side", value);
+        }
+        let team = board.add_team("t1");
+        team.prefix = literal("[");
+        team.suffix = literal("]");
+        board.add_to_team("c", "t1");
+        let objective = board.objective("side").unwrap();
+        let rows = sidebar_rows(&board, objective);
+        let names: Vec<_> = rows.iter().map(|r| r.name.plain()).collect();
+        assert_eq!(names, ["[c]", "a", "b"]);
+        assert_eq!(rows.iter().map(|r| r.value).collect::<Vec<_>>(), [9, 3, 3]);
+        assert_eq!(rows[0].score.plain(), "9");
+        assert_eq!(objective.display_text().plain(), "Title");
     }
 }

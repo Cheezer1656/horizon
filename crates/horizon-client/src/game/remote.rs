@@ -5740,6 +5740,17 @@ impl Game<'_> {
             _ => {}
         }
     }
+    /// The players the connection lists, in no set order; skins as the
+    /// server's entries have them. None without a connection.
+    pub(super) fn remote_listed_players(&self) -> Option<Vec<horizon_client::tab_list::TabPlayer>> {
+        let r = self.remote.as_ref()?;
+        Some(
+            r.listed
+                .iter()
+                .filter_map(|u| r.tab_players.get(u).cloned())
+                .collect(),
+        )
+    }
     /// The player list's view of the connection: the listed players (with
     /// their downloaded skins once ready), online mode, and which players
     /// are in the level with an upside-down name.
@@ -5787,13 +5798,7 @@ impl Game<'_> {
     ) -> Option<(Vec<horizon_client::tab_list::TabPlayer>, bool, Vec<u128>)> {
         self.update_remote_skins();
         self.publish_tab_object_skins();
-        let mut players: Vec<_> = {
-            let r = self.remote.as_ref()?;
-            r.listed
-                .iter()
-                .filter_map(|u| r.tab_players.get(u).cloned())
-                .collect()
-        };
+        let mut players = self.remote_listed_players()?;
         for p in &mut players {
             p.skin = self
                 .remote

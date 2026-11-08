@@ -755,7 +755,7 @@ impl Game<'_> {
     // ---- the sidebar -----------------------------------------------------------
 
     /// The objective in the player's team's sidebar slot, else the sidebar's.
-    fn sidebar_objective(&self) -> Option<&sb::Objective> {
+    pub(super) fn sidebar_objective(&self) -> Option<&sb::Objective> {
         let board = &self.score.board;
         if board.display.is_empty() {
             return None;
@@ -819,6 +819,19 @@ impl Game<'_> {
         }
         self.cosmetics_frame();
     }
+    /// The integrated server's player list: the local player and the LAN
+    /// guests that have entered the world.
+    pub(super) fn local_tab_list(&self) -> Vec<TabPlayer> {
+        let uuid = self.level.player_uuid.map_or(0, |u| {
+            u.iter()
+                .fold(0u128, |a, &w| (a << 32) | u128::from(w as u32))
+        });
+        let mut me = TabPlayer::new(uuid, PLAYER_NAME);
+        me.game_mode = self.mode_id();
+        me.skin = "entity/player/wide/steve".into();
+        let guests = self.lan.as_ref().map_or(&[][..], |h| &h.hub.guests);
+        local_tab_players(me, guests)
+    }
     /// `Hud.extractTabList`: the player list while the player-list key is
     /// held. A local world shows it with a joined LAN guest or a `list`
     /// objective.
@@ -857,15 +870,7 @@ impl Game<'_> {
             Some(remote) => remote,
             None => {
                 // The integrated server: the local player, online mode, no ping.
-                let uuid = self.level.player_uuid.map_or(0, |u| {
-                    u.iter()
-                        .fold(0u128, |a, &w| (a << 32) | u128::from(w as u32))
-                });
-                let mut me = TabPlayer::new(uuid, PLAYER_NAME);
-                me.game_mode = self.mode_id();
-                me.skin = "entity/player/wide/steve".into();
-                let guests = self.lan.as_ref().map_or(&[][..], |h| &h.hub.guests);
-                let players = local_tab_players(me, guests);
+                let players = self.local_tab_list();
                 let upside_down = players
                     .iter()
                     .filter(|p| p.name == "Dinnerbone" || p.name == "Grumm")

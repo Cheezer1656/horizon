@@ -27,8 +27,9 @@ pub use crate::game::NativeFluidTank;
 pub use crate::game::NativeInventoryKind;
 pub use crate::game::native_block_entity_draw::{BlockEntityDraw, CubeFace};
 pub use crate::game::native_client_services::{
-    NativeClientEntity, NativeClientHead, NativeClientItem, NativeClientProfile, NativeClientState,
-    NativeScreenKind, NativeWorldId,
+    NativeClientBossBar, NativeClientEntity, NativeClientHead, NativeClientItem,
+    NativeClientProfile, NativeClientSidebar, NativeClientSidebarLine, NativeClientState,
+    NativeClientTabEntry, NativeClientTabList, NativeClientTitles, NativeScreenKind, NativeWorldId,
 };
 pub use crate::game::native_text_field::NativeTextField;
 pub use crate::game::{

@@ -337,6 +337,26 @@ pub struct NativeScreenView<'a> {
     pub partial_tick: f32,
 }
 
+/// One slot of the open container screen, for `native_container_screen_render_background`
+/// and `_foreground`: the menu's slot number, where the screen draws it and
+/// what it holds.
+#[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
+pub struct NativeSlot<'a> {
+    /// The menu's slot number (`AbstractContainerMenu.slots` order, the one
+    /// `ContainerSetSlot` and `ContainerClick` carry, and `Host::menu_stacks`
+    /// indexes by): the menu's own slots first, then the player's inventory
+    /// and hotbar below them.
+    pub index: usize,
+    /// The slot's 16 x 16 item box in GUI pixels, `[x, y, width, height]`
+    /// from the window's top left (the `Slot.x`, `Slot.y` of vanilla, moved
+    /// by the screen's panel): where its item is drawn.
+    pub rect: [f32; 4],
+    /// What the slot shows now, with its components; None for an empty slot.
+    /// A result slot shows the result it would give.
+    pub stack: Option<&'a ItemStack>,
+}
+
 /// A depth-tested outline of the client's block selection shape.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NativeBlockRim {

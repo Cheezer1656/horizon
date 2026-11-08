@@ -40,6 +40,10 @@ mod tests {
         pub(super) struct NativeNoteBlockChange<'a>(pub &'a ());
         pub(super) struct NativeScreenView<'a>(pub &'a ());
         pub(super) struct NativeTextField;
+        pub(super) struct NativeSlot<'a> {
+            pub index: usize,
+            pub stack: Option<&'a super::ItemStack>,
+        }
         pub(super) struct ClientboundPlayPacket;
         pub(super) struct EntityDataValue;
         pub(super) struct NativeGenerate;
@@ -336,6 +340,59 @@ mod tests {
         let mut batch = HudBatch(vec![99]);
         dispatch_gui_render_post(&TestHost, &[], &mut batch, true, true);
         assert_eq!(batch.0, [99]);
+    }
+
+    #[test]
+    fn container_screen_render_points_draw_in_order_and_see_the_slots() {
+        struct Marks(u32);
+        impl Hooks for Marks {
+            // Behind the items: one mark per empty slot.
+            fn container_screen_render_background(
+                &self,
+                _: &dyn Host,
+                event: &mut ContainerScreenRenderBackgroundEvent<'_>,
+            ) {
+                for slot in event.slots.iter().filter(|s| s.stack.is_none()) {
+                    event.batch.0.push(self.0 * 100 + slot.index as u32);
+                }
+            }
+            // Over the items: one mark per filled slot.
+            fn container_screen_render_foreground(
+                &self,
+                _: &dyn Host,
+                event: &mut ContainerScreenRenderForegroundEvent<'_>,
+            ) {
+                for slot in event.slots.iter().filter(|s| s.stack.is_some()) {
+                    event.batch.0.push(self.0 * 1000 + slot.index as u32);
+                }
+            }
+        }
+        let mods: Vec<Box<dyn Hooks>> = vec![Box::new(Marks(1)), Box::new(Marks(2))];
+        let held = ItemStack;
+        let slots = [
+            NativeSlot {
+                index: 0,
+                stack: None,
+            },
+            NativeSlot {
+                index: 1,
+                stack: Some(&held),
+            },
+            NativeSlot {
+                index: 2,
+                stack: None,
+            },
+        ];
+        let screen = NativeScreenView(&());
+        let mut batch = HudBatch(vec![99]);
+        dispatch_container_screen_render_background(&TestHost, &mods, &mut batch, &screen, &slots);
+        assert_eq!(batch.0, [99, 100, 102, 200, 202]);
+        dispatch_container_screen_render_foreground(&TestHost, &mods, &mut batch, &screen, &slots);
+        assert_eq!(batch.0, [99, 100, 102, 200, 202, 1001, 2001]);
+        // No slots (a screen no menu numbers) and no mods draw nothing.
+        dispatch_container_screen_render_background(&TestHost, &mods, &mut batch, &screen, &[]);
+        dispatch_container_screen_render_foreground(&TestHost, &[], &mut batch, &screen, &slots);
+        assert_eq!(batch.0.len(), 7);
     }
 
     #[test]

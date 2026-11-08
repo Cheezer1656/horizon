@@ -2088,6 +2088,7 @@ impl Game<'_> {
             self.draw_anvil_name(batch, ox, oy);
         }
         let drag = self.drag_view();
+        self.fire_container_screen_render(batch, false, ox, oy);
         self.draw_hovered_slot_highlight(batch, false, ox, oy);
         for i in self.station_slots().unwrap_or_default() {
             let Some((sx, sy)) = self.slot_position_any(i) else {
@@ -2097,6 +2098,7 @@ impl Game<'_> {
             self.draw_slot_item(batch, drag.as_ref(), i, &stack, ox + sx, oy + sy);
         }
         self.draw_hovered_slot_highlight(batch, true, ox, oy);
+        self.fire_container_screen_render(batch, true, ox, oy);
         if let Some(slot) = self.slot_at(batch, self.cursor.0, self.cursor.1)
             && tooltip.is_none()
             && tooltip_stack.is_none()

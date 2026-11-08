@@ -185,6 +185,8 @@ struct Message {
     source: ChatSource,
     /// `GuiMessage.signature`: a signed player message's, for deletion.
     signature: Option<Box<Signature>>,
+    /// The handle [`Chat::add_handled`] gave a mod's line, 0 for every other message.
+    id: u64,
 }
 /// A wrapped line (`GuiMessage.Line`).
 #[derive(Clone, Debug)]
@@ -207,7 +209,10 @@ pub struct ChatQol {
 /// Whether `next` repeats `last`: the same text, kind and tag, neither one signed (a server may
 /// delete a signed message by itself).
 fn repeats(last: &Message, next: &Message) -> bool {
-    last.signature.is_none()
+    // A line with a handle stays its own: a mod edits or removes it by that handle.
+    last.id == 0
+        && next.id == 0
+        && last.signature.is_none()
         && next.signature.is_none()
         && last.source == next.source
         && last.tag == next.tag
@@ -277,6 +282,8 @@ fn time_alpha(ticks: f32, added: u64) -> f32 {
 #[derive(Default)]
 pub struct Chat {
     messages: Vec<Message>,
+    /// The handle the next [`Chat::add_handled`] line gets (handles start at 1 and are not reused).
+    next_id: u64,
     /// Wrapped lines, newest first.
     lines: Vec<Line>,
     /// Sent messages and commands (ChatComponent.recentChat).
@@ -346,6 +353,100 @@ impl Chat {
     ) {
         self.add_player_message(&atlas.font, content, signature, tag, ticks, focused);
     }
+    /// A line a mod can edit or remove later: a client line like [`Chat::add`]'s (it always shows,
+    /// has no indicator), and it never joins a compact chat count. The handle names it until it
+    /// leaves the 100 messages the chat keeps, or [`Chat::clear`].
+    pub fn add_handled(
+        &mut self,
+        atlas: &HudAtlas,
+        content: Text,
+        ticks: u64,
+        focused: bool,
+    ) -> u64 {
+        self.add_handled_with(&atlas.font, content, ticks, focused)
+    }
+    fn add_handled_with(
+        &mut self,
+        font: &crate::font::Font,
+        content: Text,
+        ticks: u64,
+        focused: bool,
+    ) -> u64 {
+        self.next_id += 1;
+        let id = self.next_id;
+        self.push_message(
+            font,
+            Message {
+                added: ticks,
+                time: (0, 0),
+                repeats: 1,
+                wrapped: 0,
+                content,
+                tag: None,
+                source: ChatSource::Client,
+                signature: None,
+                id,
+            },
+            focused,
+        );
+        id
+    }
+    /// Replaces the content of the line `id` names, in place: its time, age (so its fade) and
+    /// place stay. False when the chat no longer holds it. A reader scrolled up keeps their view.
+    pub fn edit_handled(
+        &mut self,
+        atlas: &HudAtlas,
+        id: u64,
+        content: Text,
+        focused: bool,
+    ) -> bool {
+        self.edit_handled_with(&atlas.font, id, content, focused)
+    }
+    fn edit_handled_with(
+        &mut self,
+        font: &crate::font::Font,
+        id: u64,
+        content: Text,
+        focused: bool,
+    ) -> bool {
+        let Some(index) = self.handled_index(id) else {
+            return false;
+        };
+        self.messages[index].content = content;
+        let wrapped = self.wrap_message(font, &self.messages[index]);
+        self.replace_lines(index, wrapped, focused);
+        true
+    }
+    /// Takes the line `id` names out of the chat. False when the chat no longer holds it.
+    pub fn remove_handled(&mut self, id: u64, focused: bool) -> bool {
+        let Some(index) = self.handled_index(id) else {
+            return false;
+        };
+        self.replace_lines(index, Vec::new(), focused);
+        self.messages.remove(index);
+        true
+    }
+    fn handled_index(&self, id: u64) -> Option<usize> {
+        (id != 0).then(|| self.messages.iter().position(|m| m.id == id))?
+    }
+    /// Swaps the wrapped lines of `messages[index]` for `lines` (reading order). Lines are kept
+    /// newest first, so a message's lines come after those of the messages newer than it.
+    fn replace_lines(&mut self, index: usize, mut lines: Vec<Line>, focused: bool) {
+        let offset: usize = self.messages[..index].iter().map(|m| m.wrapped).sum();
+        let old = self.messages[index].wrapped;
+        let delta = lines.len() as i32 - old as i32;
+        self.messages[index].wrapped = lines.len();
+        lines.reverse();
+        // The oldest lines past the 100 kept are already gone.
+        let end = (offset + old).min(self.lines.len());
+        let start = offset.min(end);
+        self.lines.splice(start..end, lines);
+        self.lines.truncate(100);
+        // Lines below a reader's view move it: they stay on the lines they were reading.
+        if self.scroll > 0 && offset + old <= self.scroll {
+            self.scroll_by(delta, focused);
+        }
+    }
     #[cfg(test)]
     fn add_signed_message(
         &mut self,
@@ -378,6 +479,7 @@ impl Chat {
                 tag: tag.map(std::sync::Arc::new),
                 source: ChatSource::Player,
                 signature: signature.map(Box::new),
+                id: 0,
             },
             focused,
         );
@@ -402,6 +504,7 @@ impl Chat {
                 tag,
                 source,
                 signature: None,
+                id: 0,
             },
             focused,
         );
@@ -453,15 +556,28 @@ impl Chat {
     }
     /// The lines `message` wraps to (none when the chat search hides it), added newest first.
     fn add_lines(&mut self, font: &crate::font::Font, message: &Message, focused: bool) -> usize {
+        let wrapped = self.wrap_message(font, message);
+        let count = wrapped.len();
+        for line in wrapped {
+            if focused && self.scroll > 0 {
+                self.new_since_scroll = true;
+                self.scroll_by(1, focused);
+            }
+            self.lines.insert(0, line);
+        }
+        self.lines.truncate(100);
+        count
+    }
+    /// The lines `message` wraps to, in reading order (none when the chat search hides it).
+    fn wrap_message(&self, font: &crate::font::Font, message: &Message) -> Vec<Line> {
         // What the chat shows: legacy `§` codes format the text, they aren't part of it.
         let whole = message.content.strip_legacy().plain();
         if let Some(query) = &self.search
             && !whole.to_lowercase().contains(query.as_str())
         {
-            return 0;
+            return Vec::new();
         }
         let whole: std::sync::Arc<str> = whole.into();
-        let mut count = 0;
         // GuiMessage.splitLines: room for the tag's icon (its width, 4 before and 2 after).
         let icon = if message.tag.as_ref().is_some_and(|tag| tag.icon) {
             9 + 4 + 2
@@ -470,24 +586,15 @@ impl Chat {
         };
         let width = self.max_width() - icon;
         let content = self.message_text(message);
-        for line in font.wrap_components(&content, width) {
-            count += 1;
-            if focused && self.scroll > 0 {
-                self.new_since_scroll = true;
-                self.scroll_by(1, focused);
-            }
-            self.lines.insert(
-                0,
-                Line {
-                    added: message.added,
-                    content: line,
-                    tag: message.tag.clone(),
-                    message: whole.clone(),
-                },
-            );
-        }
-        self.lines.truncate(100);
-        count
+        font.wrap_components(&content, width)
+            .into_iter()
+            .map(|line| Line {
+                added: message.added,
+                content: line,
+                tag: message.tag.clone(),
+                message: whole.clone(),
+            })
+            .collect()
     }
     /// What a message's lines wrap (ComponentRenderUtils.wrapComponents):
     /// without Chat Colors its `§` codes are stripped (stripColor); with
@@ -648,6 +755,7 @@ impl Chat {
             ))),
             source: ChatSource::Server,
             signature: None,
+            id: 0,
         };
         // refreshTrimmedMessages.
         self.rewrap(font);

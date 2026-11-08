@@ -1026,3 +1026,97 @@ fn a_compact_repeat_keeps_the_scrolled_view_still() {
     says(&mut chat, "new");
     assert_eq!(chat.scroll, 6);
 }
+
+/// A mod's line is edited or removed by its handle, keeping the lines around it, and never
+/// joins a compact count.
+#[test]
+fn a_handled_line_is_edited_and_removed_in_place() {
+    let font = font();
+    let mut chat = Chat::default();
+    chat.qol.compact = true;
+    let says = |chat: &mut Chat, text: &str| {
+        chat.add_message(
+            &font,
+            Text::literal(text),
+            None,
+            ChatSource::Server,
+            0,
+            false,
+        );
+    };
+    let shown =
+        |chat: &Chat| -> Vec<String> { chat.lines.iter().map(|l| l.content.plain()).collect() };
+    says(&mut chat, "before");
+    let first = chat.add_handled_with(&font, Text::literal("mine"), 0, false);
+    let second = chat.add_handled_with(&font, Text::literal("mine"), 0, false);
+    says(&mut chat, "after");
+    assert_ne!(first, second);
+    assert_eq!(shown(&chat), ["after", "mine", "mine", "before"]);
+
+    let styled = Text::literal("edited").with_color(text::RED);
+    assert!(chat.edit_handled_with(&font, first, styled.clone(), false));
+    assert_eq!(shown(&chat), ["after", "mine", "edited", "before"]);
+    assert_eq!(chat.lines[2].content, styled);
+    // An edit that wraps to more lines takes their place, and back.
+    let long = "word ".repeat(200);
+    assert!(chat.edit_handled_with(&font, second, Text::literal(long.clone()), false));
+    assert!(chat.lines.len() > 4);
+    assert_eq!(chat.lines[0].content.plain(), "after");
+    assert_eq!(chat.lines.last().unwrap().content.plain(), "before");
+    assert!(chat.edit_handled_with(&font, second, Text::literal("short"), false));
+    assert_eq!(shown(&chat), ["after", "short", "edited", "before"]);
+
+    assert!(chat.remove_handled(first, false));
+    assert_eq!(shown(&chat), ["after", "short", "before"]);
+    assert!(!chat.remove_handled(first, false), "gone");
+    assert!(!chat.edit_handled_with(&font, first, Text::literal("x"), false));
+    assert!(!chat.edit_handled_with(&font, 0, Text::literal("x"), false));
+    assert!(!chat.remove_handled(0, false));
+    chat.clear();
+    assert!(!chat.edit_handled_with(&font, second, Text::literal("x"), false));
+}
+
+/// A line that has left the 100 kept can no longer be edited, and an edit under a scrolled
+/// view leaves the view where it was.
+#[test]
+fn an_edit_keeps_the_scrolled_view_and_old_lines_are_gone() {
+    let font = font();
+    let mut chat = Chat::default();
+    let old = chat.add_handled_with(&font, Text::literal("old"), 0, true);
+    let mine = chat.add_handled_with(&font, Text::literal("mine"), 0, true);
+    for i in 0..30 {
+        chat.add_message(
+            &font,
+            Text::literal(format!("line {i}")),
+            None,
+            ChatSource::Server,
+            0,
+            true,
+        );
+    }
+    chat.scroll_by(40, true);
+    let before = chat.scroll;
+    assert!(before > 0);
+    // "mine" is older than the view's bottom: no move. "line 29" is below it.
+    assert!(chat.edit_handled_with(&font, mine, Text::literal("mine ".repeat(200)), true));
+    assert_eq!(chat.scroll, before);
+    let newer = chat.add_handled_with(&font, Text::literal("new"), 0, true);
+    let scroll = chat.scroll;
+    let grown = Text::literal("new ".repeat(200));
+    assert!(chat.edit_handled_with(&font, newer, grown, true));
+    assert!(chat.scroll > scroll, "lines added under the view push it up");
+    assert!(chat.edit_handled_with(&font, newer, Text::literal("new"), true));
+    assert_eq!(chat.scroll, scroll);
+    for i in 0..100 {
+        chat.add_message(
+            &font,
+            Text::literal(format!("more {i}")),
+            None,
+            ChatSource::Server,
+            0,
+            false,
+        );
+    }
+    assert!(!chat.edit_handled_with(&font, old, Text::literal("x"), false));
+    assert!(chat.lines.len() <= 100);
+}

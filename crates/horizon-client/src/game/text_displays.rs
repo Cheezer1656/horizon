@@ -284,6 +284,11 @@ impl Game<'_> {
                 if !self.display_in_view(camera, position, &d, scale) {
                     continue;
                 }
+                // `native_client_entity_render`: a native mod hides the display or fades it.
+                let Some(look) = self.entity_look(*id as u32, kind) else {
+                    continue;
+                };
+                let entity_start = out.len();
                 let rotation = std::array::from_fn(|i| {
                     display.old_rotation[i]
                         + angle(display.rotation[i] - display.old_rotation[i]) * partial as f32
@@ -329,6 +334,7 @@ impl Game<'_> {
                     let pose = matrix * glam::Mat4::from_rotation_y(std::f32::consts::PI);
                     self.submit_item_world(&state, pose, light, out);
                 }
+                look.apply(&mut out[entity_start..]);
             }
         }
         self.mark_entity(out.len(), "");
@@ -347,12 +353,20 @@ impl Game<'_> {
         let scale = self.view_scale();
         let background = self.settings.text_background(0.25);
         let mut displays = std::mem::take(&mut self.text_displays);
-        for display in displays.values_mut().filter(|d| d.shows == Shows::Text) {
+        for (id, display) in displays.iter_mut().filter(|(_, d)| d.shows == Shows::Text) {
             display.last_progress = display.progress(partial as f32);
             let d = display.shown.blend(&display.from, display.last_progress);
             let position = display.previous.lerp(display.position, partial);
             if d.text.is_empty() || !self.display_in_view(camera, position, &d, scale) {
                 // Out of view: its glyphs stay cached for when it comes back.
+                continue;
+            }
+            // `native_client_entity_render`: a native mod hides the display. Its text has
+            // its own opacity, so only `cancel` applies.
+            if self
+                .entity_look(*id as u32, "minecraft:text_display")
+                .is_none()
+            {
                 continue;
             }
             let cached = display.lines.take();

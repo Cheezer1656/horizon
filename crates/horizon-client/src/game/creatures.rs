@@ -7664,6 +7664,12 @@ impl Game<'_> {
             if culling.hides_entity() {
                 continue;
             }
+            // `native_client_entity_render`: a native mod hides the mob, fades it or takes
+            // its armour off. A mob on the GPU path would be faded on the CPU.
+            let Some(look) = self.entity_look(mob.id, &mob.kind.id) else {
+                continue;
+            };
+            let skinning = skinning && look.gpu_posable();
             let entity_start = out.len();
             self.mark_motion(entity_start, (1 << 32) | u64::from(mob.id));
             self.mark_entity(entity_start, &mob.kind.id);
@@ -7720,6 +7726,7 @@ impl Game<'_> {
                         continue;
                     }
                 }
+                look.apply(&mut out[entity_start..]);
                 if outline.is_none() {
                     self.cull_entity_vertices(out, entity_start);
                 }
@@ -7737,7 +7744,7 @@ impl Game<'_> {
                 );
             }
             // Other players on a server: PlayerRenderer's HumanoidArmorLayer.
-            let armor = if is_player {
+            let armor = if is_player && !look.hide_armor {
                 self.worn_armor_layers(mob)
             } else {
                 Vec::new()
@@ -7758,6 +7765,10 @@ impl Game<'_> {
                     Species::Blaze | Species::MagmaCube | Species::GlowSquid | Species::SulfurCube
                 );
             let mut skinned = None;
+            // A mob's own armour layers (a zombie's) hide only for this entity's draw.
+            let _armor = look
+                .hide_armor
+                .then(horizon_client::mobs::render::hide_armor);
             if posable {
                 let mut models = self.skin_models.borrow_mut();
                 let mut frame = self.skin_frame.borrow_mut();
@@ -7854,7 +7865,7 @@ impl Game<'_> {
             if layers {
                 // Held items join the GPU path's draws, their silhouette too.
                 let skin = (skinning && silhouette_on_gpu).then_some(&mut skinned);
-                self.mob_block_geometry(mob, camera, alpha, packed, skin, out);
+                self.mob_block_geometry(mob, camera, alpha, packed, !look.hide_armor, skin, out);
                 // `native_mob_layer`: a native mod's layer, over the vanilla ones.
                 self.mod_mob_layer_geometry(mob, who, alpha as f32, camera, packed, out);
             }
@@ -7869,6 +7880,7 @@ impl Game<'_> {
                     continue;
                 }
             }
+            look.apply(&mut out[entity_start..]);
             // Glowing outlines and a guardian's beam remain visible independently
             // of whether the body is hidden behind terrain.
             if outline.is_none() && culling.checks_vertices() && beam.is_none() {
@@ -7917,9 +7929,22 @@ impl Game<'_> {
         });
         // A glowing projectile's outline: what it drew up to the next one.
         let mut glowing = None;
+        // A faded projectile (`native_client_entity_render`): what it drew, and by how much.
+        let mut faded: Option<(usize, f32)> = None;
         for (a, at) in live.chain(taken) {
+            if let Some((start, alpha)) = faded.take() {
+                super::entity_render::fade(&mut out[start..], alpha);
+            }
             if let Some((start, rgb)) = glowing.take() {
                 self.mark_outline(&out[start..], rgb);
+            }
+            if a.id != 0 {
+                let Some(look) = self.entity_look(a.id, a.kind.id()) else {
+                    continue;
+                };
+                if look.alpha < 1.0 {
+                    faded = Some((out.len(), look.alpha));
+                }
             }
             if a.id != 0
                 && let Some(rgb) = self.thing_outline(a.id, a.kind.id())
@@ -8163,6 +8188,9 @@ impl Game<'_> {
                     glint_uv: [0.0, 0.0],
                 });
             }
+        }
+        if let Some((start, alpha)) = faded {
+            super::entity_render::fade(&mut out[start..], alpha);
         }
         if let Some((start, rgb)) = glowing {
             self.mark_outline(&out[start..], rgb);

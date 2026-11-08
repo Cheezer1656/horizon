@@ -1,0 +1,17 @@
+{
+  "hooks": [
+    {
+      "name": "client_entity_render",
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_client_entity_render",
+      "neoforge": "RenderLivingEvent.Pre / EntityRenderer.shouldRender",
+      "side": "client",
+      "cancellable": true,
+      "mod_api": {
+        "contract": "cancel",
+        "out": "cancel"
+      }
+    }
+  ],
+  "rust_summary": "whether a client entity draws, how opaque, and whether its armour shows (`native_client_entity_render`).",
+  "doc_summary": "whether a client entity draws, how opaque, and whether its armour shows (`native_client_entity_render(entity_id, kind, alpha, hide_armor, cancel)`): asked each frame for every mob, player, armor stand, dropped item, projectile and display about to draw. A mod sets `alpha` below 1.0 to draw it translucent, `hide_armor` to leave out its worn armour and head item, or cancels to skip it (model, layers, held items and outline). Drawing only: the entity stays in the world, and its name tag is `native_render_name_tag`. Bundles need \"hooks\": @API:client_entity_render@."
+}

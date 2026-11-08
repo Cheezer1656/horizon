@@ -194,6 +194,59 @@ fn received_chat_is_replaced_in_order_and_cancel_stops_later_mods() {
 }
 
 #[test]
+fn entity_render_mods_fade_in_order_and_cancel_stops_later_mods() {
+    use horizon_client::mod_api::{ClientEntityRenderEvent, Flow, dispatch_client_entity_render};
+    struct TestHost;
+    impl Host for TestHost {}
+    /// Halves every entity's alpha, takes a player's armour off and hides a creeper.
+    struct Fade;
+    impl Hooks for Fade {
+        fn client_entity_render(
+            &self,
+            _host: &dyn Host,
+            event: &mut ClientEntityRenderEvent<'_>,
+        ) -> Flow {
+            if event.kind == "minecraft:creeper" {
+                return Flow::Cancel;
+            }
+            event.alpha *= 0.5;
+            event.hide_armor |= event.kind == "minecraft:player";
+            Flow::Continue
+        }
+    }
+    struct Later;
+    impl Hooks for Later {
+        fn client_entity_render(
+            &self,
+            _host: &dyn Host,
+            event: &mut ClientEntityRenderEvent<'_>,
+        ) -> Flow {
+            event.alpha *= 0.5;
+            Flow::Continue
+        }
+    }
+    let mods: Vec<Box<dyn Hooks>> = vec![Box::new(Fade), Box::new(Later)];
+    let ask = |kind: &str| {
+        let (mut alpha, mut hide_armor, mut cancel) = (1.0, false, false);
+        dispatch_client_entity_render(
+            &TestHost,
+            &mods,
+            9,
+            kind,
+            &mut alpha,
+            &mut hide_armor,
+            &mut cancel,
+        );
+        (alpha, hide_armor, cancel)
+    };
+    // Both mods ran, one after the other.
+    assert_eq!(ask("minecraft:player"), (0.25, true, false));
+    assert_eq!(ask("minecraft:armor_stand"), (0.25, false, false));
+    // A cancel stops the later mod, which would have halved the alpha again.
+    assert_eq!(ask("minecraft:creeper"), (1.0, false, true));
+}
+
+#[test]
 fn client_packet_hands_a_mod_the_decoded_packet() {
     use horizon_client::mod_api::{
         ClientPacketEvent, ClientboundPlayPacket, dispatch_client_packet,

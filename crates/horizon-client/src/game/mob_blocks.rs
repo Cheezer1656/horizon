@@ -195,20 +195,23 @@ impl Game<'_> {
         self.block_model_vertices(state, seed, t, light, true, out);
         cull_back_quads(out, first);
     }
-    /// The blocks one mob holds or carries.
+    /// The blocks one mob holds or carries, its head item (`CustomHeadLayer`) when `head`.
     pub(super) fn mob_block_geometry(
         &self,
         mob: &Mob,
         camera: glam::DVec3,
         alpha: f64,
         light: u32,
+        head: bool,
         skin: Option<&mut super::creatures::Skinned>,
         out: &mut Vec<Vertex>,
     ) {
         self.captain_banner_geometry(mob, camera, alpha, light, out);
         self.held_item_geometry(mob, camera, alpha, light, true, skin, out);
         self.worn_block_geometry(mob, camera, alpha, light, out);
-        self.head_item_geometry(mob, camera, alpha, light, true, out);
+        if head {
+            self.head_item_geometry(mob, camera, alpha, light, true, out);
+        }
         self.golem_flower_geometry(mob, camera, alpha, light, out);
         self.antenna_block_geometry(mob, camera, alpha, light, out);
         if mob.species() == Species::Enderman

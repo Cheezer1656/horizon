@@ -1117,6 +1117,12 @@ impl Game<'_> {
             if culling.hides_entity() {
                 continue;
             }
+            // `native_client_entity_render`: a native mod hides the stand, fades it or takes
+            // its armour off. A stand on the GPU path would be faded on the CPU.
+            let Some(look) = self.entity_look(a.id, "minecraft:armor_stand") else {
+                continue;
+            };
+            let skinning = skinning && look.gpu_posable();
             let entity_start = out.len();
             self.mark_motion(entity_start, Self::MOTION_OBJECT | u64::from(a.id));
             // EntityRenderer: drawn between last tick's position and this one's.
@@ -1147,26 +1153,39 @@ impl Game<'_> {
                 let mut frame = self.skin_frame.borrow_mut();
                 let mark = frame.mark();
                 let mut skin = horizon_client::mobs::skin::Skin::new(&mut models, &mut frame);
-                self.armor_stand_vertices(a, base, packed, Some(&mut skin), out);
+                self.armor_stand_vertices(a, base, packed, look.hide_armor, Some(&mut skin), out);
                 Some((mark, skin.bounds))
             } else {
-                self.armor_stand_vertices(a, base, packed, None, out);
+                self.armor_stand_vertices(a, base, packed, look.hide_armor, None, out);
                 None
             };
-            if !self.entity_glowing(a.id) {
+            // The `Glowing` outline, or one a native mod gives the stand (`native_entity_outline`).
+            let outline = self.thing_outline(a.id, "minecraft:armor_stand");
+            if let Some(rgb) = outline {
+                self.mark_outline(&out[entity_start..], rgb);
+                if let Some(((first, _, _), _)) = skinned {
+                    let color = horizon_client::mobs::render::abgr(rgb);
+                    self.skin_frame.borrow_mut().outline_since(first, color);
+                }
+            }
+            look.apply(&mut out[entity_start..]);
+            if outline.is_none() {
                 self.cull_skinned(out, entity_start, skinned);
             }
         }
     }
     /// `ArmorStandRenderer.submit` for stand `a` under `base` (its
     /// `setupRotations`): the body, the hand and head items, the armour and
-    /// the wings, at packed light `packed`. With `skin`, the stand's own models
+    /// the wings, at packed light `packed`; `hide_armor` leaves out the armour layers and the
+    /// head item. With `skin`, the stand's own models
     /// (body and armour) are posed on the GPU; items and wings stay here.
+    #[allow(clippy::too_many_arguments)]
     fn armor_stand_vertices(
         &self,
         a: &ArmorStand,
         base: glam::Mat4,
         packed: u32,
+        hide_armor: bool,
         mut skin: Option<&mut horizon_client::mobs::skin::Skin>,
         out: &mut Vec<Vertex>,
     ) {
@@ -1242,7 +1261,16 @@ impl Game<'_> {
                 );
             }
         }
-        self.armor_stand_items(a, model, base, &posed, packed, skin.as_deref_mut(), out);
+        self.armor_stand_items(
+            a,
+            model,
+            base,
+            &posed,
+            packed,
+            !hide_armor,
+            skin.as_deref_mut(),
+            out,
+        );
         // HumanoidArmorLayer: head, chest, legs, feet. One pose map for every layer
         // (`reset` keeps its capacity).
         let mut layer_poses = Poses::default();
@@ -1252,6 +1280,9 @@ impl Game<'_> {
             (3, "leggings", "legs"),
             (2, "boots", "feet"),
         ] {
+            if hide_armor {
+                break;
+            }
             let Some(stack) = &a.equipment[slot] else {
                 continue;
             };
@@ -1388,7 +1419,7 @@ impl Game<'_> {
             * glam::Mat4::from_scale(glam::Vec3::new(-1.0, -1.0, 1.0))
             * glam::Mat4::from_translation(glam::Vec3::new(0.0, -1.501, 0.0));
         let mut verts = Vec::new();
-        self.armor_stand_vertices(&stand, base, 240 | 240 << 8, None, &mut verts);
+        self.armor_stand_vertices(&stand, base, 240 | 240 << 8, false, None, &mut verts);
         // ARMOR_STAND_ANGLE: rotationXYZ(0.43633232, 0, PI).
         let gui =
             glam::Mat4::from_translation(glam::Vec3::new((x0 + x1) / 2.0, (y0 + y1) / 2.0, 0.0))
@@ -1600,8 +1631,8 @@ impl Game<'_> {
 impl Game<'_> {
     /// `ItemInHandLayer` and `CustomHeadLayer` of an armour stand: the hand
     /// items in the third-person contexts, and a non-armour head item on the
-    /// head (`translateToHead`: down a quarter, turned, 0.625 scale). With
-    /// `skin`, items that can are posed on the GPU with the stand.
+    /// head (`translateToHead`: down a quarter, turned, 0.625 scale), the head item
+    /// only when `head`. With `skin`, items that can are posed on the GPU with the stand.
     #[allow(clippy::too_many_arguments)]
     fn armor_stand_items(
         &self,
@@ -1610,6 +1641,7 @@ impl Game<'_> {
         base: glam::Mat4,
         poses: &Poses,
         light: u32,
+        head: bool,
         mut skin: Option<&mut horizon_client::mobs::skin::Skin>,
         out: &mut Vec<Vertex>,
     ) {
@@ -1665,6 +1697,9 @@ impl Game<'_> {
                 self.resolve_item(stack, context, Some(&owner), seed)
             };
             submit(&state, pose, out);
+        }
+        if !head {
+            return;
         }
         // `CustomHeadLayer`: a worn skull draws the skull model.
         if let Some(stack) = &a.equipment[5]

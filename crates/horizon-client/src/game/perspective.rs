@@ -766,6 +766,12 @@ impl Game<'_> {
         let lookup = |name: &str| atlas.sprites.get(name).map(|r| [r.u0, r.v0, r.u1, r.v1]);
         let start = out.len();
         let body = self.own_body_visible();
+        // `native_client_entity_render`: a native mod hides this player's model,
+        // fades it or takes its armour off.
+        let id = u32::try_from(self.own_entity_id()).unwrap_or(0);
+        let Some(look) = self.entity_look(id, "minecraft:player") else {
+            return;
+        };
         // `native_player_submit`: a native mod's own model for this player,
         // in place of the vanilla one and its layers (an invisible player is
         // not asked, as for the others).
@@ -793,7 +799,11 @@ impl Game<'_> {
             &lookup,
             packed,
             self.res.mob_data(),
-            &self.player_armor_layers(),
+            &if look.hide_armor {
+                Vec::new()
+            } else {
+                self.player_armor_layers()
+            },
             out,
         );
         // AvatarRenderer.shouldRenderLayers: a spectator draws no layers.
@@ -830,7 +840,9 @@ impl Game<'_> {
             self.stuck_in_body_geometry(m, self.own_entity_id(), camera, alpha as f32, packed, out);
             self.held_item_geometry(m, camera, alpha, packed, true, None, out);
             // CustomHeadLayer: a pumpkin, skull or other head item.
-            self.head_item_geometry(m, camera, alpha, packed, true, out);
+            if !look.hide_armor {
+                self.head_item_geometry(m, camera, alpha, packed, true, out);
+            }
             // `native_mob_layer`: a native mod's layer, over the vanilla ones.
             self.mod_mob_layer_geometry(m, Some(who), alpha as f32, camera, packed, out);
         }
@@ -840,7 +852,6 @@ impl Game<'_> {
             .effects
             .get("glowing")
             .map(|_| super::glowing::team_color(self.own_team()));
-        let id = u32::try_from(self.own_entity_id()).unwrap_or(0);
         if let Some(color) = self.entity_outline(id, "minecraft:player", vanilla) {
             // LivingEntityRenderer.getRenderType: an invisible glowing body
             // still draws its outline.
@@ -859,6 +870,7 @@ impl Game<'_> {
             }
             self.mark_outline(&out[start..], color);
         }
+        look.apply(&mut out[start..]);
     }
     /// `extractEntityInInventoryFollowsMouse`: the player in the box
     /// `[x0, x1) x [y0, y1)`, `size` pixels per block, turned toward the

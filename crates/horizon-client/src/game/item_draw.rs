@@ -605,6 +605,16 @@ impl Game<'_> {
                     continue;
                 }
             }
+            // `native_client_entity_render` (a pickup particle is not an entity, so it is
+            // not asked): a native mod hides the item or fades it.
+            let look = if entity {
+                let Some(look) = self.entity_look(item.id, "minecraft:item") else {
+                    continue;
+                };
+                look
+            } else {
+                super::entity_render::EntityLook::VANILLA
+            };
             // `extractItemGroupRenderState`: GROUND, seeded by the entity id.
             let owner = owner_at([q.x, q.y, q.z], 0.0, "minecraft:item");
             let state = self.resolve_item(
@@ -685,7 +695,7 @@ impl Game<'_> {
             }
             let outline = self.thing_outline(item.id, "minecraft:item");
             // Posed on the GPU when every layer can be, its silhouette too when it glows.
-            let skinned = skinning
+            let skinned = (skinning && look.gpu_posable())
                 .then(|| self.submit_item_skinned(&state, &copies, packed, lights))
                 .flatten();
             if skinned.is_none() {
@@ -699,10 +709,14 @@ impl Game<'_> {
                     let color = horizon_client::mobs::render::abgr(rgb);
                     self.skin_frame.borrow_mut().outline_since(first, color);
                 }
-            } else if let Some(culling) = culling {
-                self.finish_entity_occlusion(culling, item, out, entity_start);
-            } else {
-                self.cull_skinned(out, entity_start, skinned);
+            }
+            look.apply(&mut out[entity_start..]);
+            if outline.is_none() {
+                if let Some(culling) = culling {
+                    self.finish_entity_occlusion(culling, item, out, entity_start);
+                } else {
+                    self.cull_skinned(out, entity_start, skinned);
+                }
             }
         }
     }

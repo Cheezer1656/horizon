@@ -1010,11 +1010,30 @@ fn humanoid_layer_folder(baby: bool, layer: &str) -> &'static str {
         "humanoid"
     }
 }
+thread_local! {
+    /// Whether the mob being drawn on this thread shows no armour (`hide_armor`).
+    static ARMOR_HIDDEN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+/// While the guard lives, the humanoid mobs drawn on this thread (a zombie's or a
+/// skeleton's `HumanoidArmorLayer`) show no armour. For a native mod hiding one entity's
+/// armour (`native_client_entity_render`); a player's and an armor stand's armour is
+/// the game's to leave out.
+#[must_use = "the armour shows again when the guard is dropped"]
+pub fn hide_armor() -> ArmorHidden {
+    ArmorHidden(ARMOR_HIDDEN.replace(true))
+}
+/// Ends [`hide_armor`], restoring what was there before it.
+pub struct ArmorHidden(bool);
+impl Drop for ArmorHidden {
+    fn drop(&mut self) {
+        ARMOR_HIDDEN.set(self.0);
+    }
+}
 /// `HumanoidArmorLayer`: the armour models of the mob's main model with the
 /// equipment textures (leather tinted, with its overlay).
 fn humanoid_armor(m: &Mob, v: &mut Vec<Layer>) {
     // A player's or mannequin's armour is drawn by the game's armour layers.
-    if super::equine::is_equine(m.species()) || avatar(m) {
+    if super::equine::is_equine(m.species()) || avatar(m) || ARMOR_HIDDEN.get() {
         return;
     }
     let e = &m.extra;

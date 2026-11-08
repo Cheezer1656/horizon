@@ -1,7 +1,7 @@
 //! The launcher's generated executable for trait mods.
 use super::{Bundle, MANIFEST};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Match horizon-mixins crate IDs before using them as folder names.
 pub(super) fn valid_id(id: &str) -> bool {
@@ -69,6 +69,96 @@ pub(super) fn folder(dir: &Path, table: &toml::Value) -> Result<String, String> 
         ));
     }
     Ok(folder.to_owned())
+}
+
+/// A bundle's `[[crate]]`s as `(id, folder)`, the folders resolved. Read leniently like the
+/// injections: an entry without an id and a folder is left out, horizon-mixins refuses it when it
+/// applies.
+fn bundle_crates(bundle: &Bundle) -> Result<Vec<(String, PathBuf)>, String> {
+    let manifest = read(&bundle.dir.join(MANIFEST))?;
+    Ok(manifest
+        .get("crate")
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let text = |name: &str| entry.get(name).and_then(toml::Value::as_str);
+            let folder = bundle.dir.join(text("path")?).canonicalize().ok()?;
+            Some((text("id")?.to_owned(), folder))
+        })
+        .collect())
+}
+
+/// Point the path dependencies of a trait package at its bundle's `[[crate]]`s (`crates`, from
+/// `bundle_crates`) at the folders `stage` has them in, `native-crates/<mod>/<crate>/`. `source`
+/// is the package's own folder in the bundle, which its relative paths start from; a path that
+/// names no `[[crate]]` stays as it is. An error when horizon-mixins didn't stage a crate it
+/// should have.
+fn rewrite_crate_paths(
+    manifest: &mut toml::Table,
+    source: &Path,
+    mod_id: &str,
+    crates: &[(String, PathBuf)],
+    stage: &Path,
+) -> Result<(), String> {
+    // Cargo still reads the underscore spellings before edition 2024.
+    const KINDS: [&str; 5] = [
+        "dependencies",
+        "dev-dependencies",
+        "build-dependencies",
+        "dev_dependencies",
+        "build_dependencies",
+    ];
+    let mut tables: Vec<&mut toml::Value> = Vec::new();
+    let (targets, kinds): (Vec<_>, Vec<_>) = manifest
+        .iter_mut()
+        .partition(|(key, _)| key.as_str() == "target");
+    tables.extend(
+        kinds
+            .into_iter()
+            .filter(|(key, _)| KINDS.contains(&key.as_str()))
+            .map(|(_, value)| value),
+    );
+    for (_, target) in targets {
+        if let Some(target) = target.as_table_mut() {
+            for platform in target
+                .iter_mut()
+                .filter_map(|(_, platform)| platform.as_table_mut())
+            {
+                tables.extend(
+                    platform
+                        .iter_mut()
+                        .filter(|(key, _)| KINDS.contains(&key.as_str()))
+                        .map(|(_, value)| value),
+                );
+            }
+        }
+    }
+    for dependencies in tables.into_iter().filter_map(toml::Value::as_table_mut) {
+        for (name, dependency) in dependencies {
+            let Some(path) = dependency
+                .as_table_mut()
+                .and_then(|d| d.get_mut("path"))
+                .filter(|p| p.is_str())
+            else {
+                continue;
+            };
+            let Ok(resolved) = source.join(path.as_str().expect("filtered")).canonicalize() else {
+                continue;
+            };
+            let Some((id, _)) = crates.iter().find(|(_, folder)| *folder == resolved) else {
+                continue;
+            };
+            let relative = format!("{}/{mod_id}/{id}", super::crates::DIR);
+            if !stage.join(&relative).join("Cargo.toml").is_file() {
+                return Err(format!(
+                    "{mod_id}: dependency {name} names [[crate]] {id}, which horizon-mixins didn't stage as {relative}"
+                ));
+            }
+            *path = format!("../../{relative}").into();
+        }
+    }
+    Ok(())
 }
 
 pub(super) const PACKAGE: &str = "horizon-native-game";
@@ -205,6 +295,14 @@ pub(super) fn stage(
             new.insert("default-features".into(), false.into());
         }
         *dependency = rewritten;
+        // The package depends on the game, so its bundle's crates (which can't) are for it too.
+        rewrite_crate_paths(
+            &mut manifest,
+            &source,
+            &bundle.id,
+            &bundle_crates(bundle)?,
+            stage,
+        )?;
         let targets: Vec<_> = declared[*index]
             .iter()
             .map(|dependency| super::dependencies::Package {
@@ -298,7 +396,7 @@ pub(super) fn stage(
 mod tests {
     use super::*;
 
-    fn fixture(manifest: &str) -> std::path::PathBuf {
+    fn fixture(manifest: &str) -> PathBuf {
         let name = std::thread::current().name().unwrap().replace(':', "-");
         let dir = super::super::tests::dir(&name);
         fs::create_dir_all(dir.join("engine/src")).unwrap();
@@ -462,6 +560,73 @@ mod tests {
             game["build-dependencies"]["horizon-mod-api-gen"]["path"].as_str(),
             Some("../horizon-mod-api-gen")
         );
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn api_paths_follow_the_bundles_crates() {
+        let dir = fixture(
+            "[mod]\nid = 'example'\nversion = '1'\n[api]\npath = 'engine'\n[[crate]]\nid = 'core'\npath = 'core'\n[[crate]]\nid = 'data'\npath = 'data'\n",
+        );
+        for name in ["core", "data", "unlisted"] {
+            fs::create_dir_all(dir.join(name).join("src")).unwrap();
+            fs::write(dir.join(name).join("Cargo.toml"), "").unwrap();
+        }
+        fs::write(
+            dir.join("engine/Cargo.toml"),
+            "[package]\nname = 'example-mod'\nversion = '0.1.0'\nedition = '2024'\n[dependencies]\nhorizon-client = '0.1'\ncore = { path = '../core', features = ['x'] }\nlocal = { path = '../engine/../data', package = 'example-data' }\nunlisted = { path = '../unlisted' }\nregistry = '1'\n[target.'cfg(unix)'.build-dependencies]\nbuild-core = { path = '../core', package = 'example-core' }\n",
+        )
+        .unwrap();
+        let bundle = super::super::bundle(&dir, None).unwrap();
+        let stage_dir = dir.join("workspace");
+        fs::create_dir_all(stage_dir.join("crates/horizon-client")).unwrap();
+        fs::write(stage_dir.join("Cargo.toml"), "[workspace]\nmembers = []\n").unwrap();
+        fs::write(
+            stage_dir.join("crates/horizon-client/Cargo.toml"),
+            "[package]\nname = 'horizon-client'\nversion = '0.1.0'\n",
+        )
+        .unwrap();
+        let resolution = super::super::dependencies::Resolution { order: vec![0] };
+        // horizon-mixins staged one of the two crates only.
+        fs::create_dir_all(stage_dir.join("native-crates/example/core")).unwrap();
+        fs::write(stage_dir.join("native-crates/example/core/Cargo.toml"), "").unwrap();
+        let error = stage(
+            &stage_dir,
+            std::slice::from_ref(&bundle),
+            &[vec![]],
+            &resolution,
+        )
+        .unwrap_err();
+        assert!(error.contains("native-crates/example/data"), "{error}");
+        fs::create_dir_all(stage_dir.join("native-crates/example/data")).unwrap();
+        fs::write(stage_dir.join("native-crates/example/data/Cargo.toml"), "").unwrap();
+        assert!(stage(&stage_dir, &[bundle], &[vec![]], &resolution).unwrap());
+        let engine = read(&stage_dir.join("native-api/example/Cargo.toml")).unwrap();
+        let dependencies = &engine["dependencies"];
+        assert_eq!(
+            dependencies["core"]["path"].as_str(),
+            Some("../../native-crates/example/core")
+        );
+        // The rest of the entry is kept, and a path is found however it is spelled.
+        assert_eq!(dependencies["core"]["features"][0].as_str(), Some("x"));
+        assert_eq!(
+            dependencies["local"]["path"].as_str(),
+            Some("../../native-crates/example/data")
+        );
+        assert_eq!(
+            dependencies["local"]["package"].as_str(),
+            Some("example-data")
+        );
+        assert_eq!(
+            engine["target"]["cfg(unix)"]["build-dependencies"]["build-core"]["path"].as_str(),
+            Some("../../native-crates/example/core")
+        );
+        // A path that names no [[crate]] and a registry dependency stay as written.
+        assert_eq!(
+            dependencies["unlisted"]["path"].as_str(),
+            Some("../unlisted")
+        );
+        assert_eq!(dependencies["registry"].as_str(), Some("1"));
         fs::remove_dir_all(dir).unwrap();
     }
 

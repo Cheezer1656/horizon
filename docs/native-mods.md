@@ -4680,6 +4680,35 @@ depends on, else in bundle order). The package is not a
 `[[crate]]`: it depends on the game instead of the game depending on it. A bundle with no
 injections, state, bridges, modules, mixin crates or post-build steps skips horizon-mixins.
 
+A bundle can also hold `[[crate]]`s for the code of its trait mod that doesn't need the game's types (parsing, data,
+the bulk of a big mod). The `[api]` package depends on one by its relative path, and the launcher points that path at
+the crate's staged folder, `native-crates/<mod>/<crate>/`:
+
+```toml
+# horizon-mixin.toml
+[api]
+path = "engine"
+
+[[crate]]
+id = "core"
+path = "core"
+```
+
+```toml
+# engine/Cargo.toml
+[dependencies]
+horizon-client = "0.1"                 # as before: the launcher points it at the game
+my-core = { path = "../core" }         # engine/../core is the [[crate]] "core"
+```
+
+Cargo compiles the crate once, as for any `[[crate]]`, and keeps it when `horizon-client` is rebuilt, so a mod's
+bulk costs a rebuild only when it changes. The path may be spelled any way that reaches the crate's folder
+(`../core`, `../engine/../core`), in `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]` or a
+`[target.*]` table; the entry's other keys (`package`, `features`) are kept. A path that names no `[[crate]]` is left
+as written. The crate follows the rules of any `[[crate]]` (no `horizon-client`, dependencies from Horizon's
+`Cargo.lock`). Leave `dependent` out: horizon-mixins also adds the crate to `horizon-client`, where it is unused. A
+crate of another bundle can't be named this way.
+
 Turning a trait mod off in Options > Mods takes effect at once: the game skips its `Hooks` from the next dispatch on,
 on the server thread and in the window alike, and turning it on again resumes it, with no rebuild while it is still in
 the build. It stays loaded and keeps what it holds; what it registered at start (blocks, items, component types)

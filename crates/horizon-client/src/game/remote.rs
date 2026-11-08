@@ -2191,8 +2191,9 @@ impl Game<'_> {
             if let Received::Event(Event::Packet(packet)) = &item
                 && let C::ForgetLevelChunk(p) = &**packet
             {
-                self.native_client_packet(packet);
-                forgotten.insert((p.pos[0], p.pos[1]));
+                if !self.hear_packet(packet) {
+                    forgotten.insert((p.pos[0], p.pos[1]));
+                }
                 continue;
             }
             self.forget_remote_columns(&mut forgotten);
@@ -2221,8 +2222,9 @@ impl Game<'_> {
                             continue;
                         }
                     };
-                    self.native_client_packet(&packet);
-                    if let C::LevelChunkWithLight(p) = *packet {
+                    if !self.hear_packet(&packet)
+                        && let C::LevelChunkWithLight(p) = *packet
+                    {
                         self.remote_chunk(&p, Some((&format, column)));
                     }
                     chunks += started.map_or(Duration::ZERO, |t| t.elapsed());
@@ -3587,8 +3589,20 @@ impl Game<'_> {
         }
     }
 
+    /// Tells the native mods about a play packet just before the game handles
+    /// it (`native_client_packet`, then `native_client_packet_pre`); true when
+    /// one of them cancelled it, and the game must not handle it.
+    fn hear_packet(&mut self, packet: &C) -> bool {
+        self.native_client_packet(packet);
+        let mut cancel = false;
+        self.native_client_packet_pre(packet, &mut cancel);
+        cancel
+    }
+
     pub(super) fn handle_packet(&mut self, packet: C) -> Result<()> {
-        self.native_client_packet(&packet);
+        if self.hear_packet(&packet) {
+            return Ok(());
+        }
         match packet {
             // ClientCommonPacketListenerImpl.handlePing runs on the game
             // thread, after all preceding packets (especially teleports).

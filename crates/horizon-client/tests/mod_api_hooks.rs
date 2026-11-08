@@ -734,3 +734,61 @@ fn wind_burst_filter_preserves_order_and_context() {
     );
     assert_eq!(blocks, vec![[3, 70, -2], [2, 70, -2]]);
 }
+
+#[test]
+fn client_packet_pre_cancel_stops_later_mods_and_keeps_the_rest() {
+    use horizon_client::mod_api::{
+        ClientPacketPreEvent, ClientboundPlayPacket, Flow, dispatch_client_packet_pre,
+    };
+    use horizon_protocol::packets::configuration::{CustomPayload, Ping};
+    use std::sync::Mutex;
+    static SEEN_BY_LATER: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    struct TestHost;
+    impl Host for TestHost {}
+    // Cancels the plugin channel it names and lets everything else through.
+    struct Hide;
+    impl Hooks for Hide {
+        fn client_packet_pre(
+            &self,
+            _host: &mut dyn Host,
+            event: &mut ClientPacketPreEvent<'_>,
+        ) -> Flow {
+            match event.packet {
+                ClientboundPlayPacket::CustomPayload(p) if p.channel == "mymod:hidden" => {
+                    Flow::Cancel
+                }
+                _ => Flow::Continue,
+            }
+        }
+    }
+    struct Later;
+    impl Hooks for Later {
+        fn client_packet_pre(
+            &self,
+            _host: &mut dyn Host,
+            event: &mut ClientPacketPreEvent<'_>,
+        ) -> Flow {
+            if let ClientboundPlayPacket::CustomPayload(p) = event.packet {
+                SEEN_BY_LATER.lock().unwrap().push(p.channel.clone());
+            }
+            Flow::Continue
+        }
+    }
+    let mods: Vec<Box<dyn Hooks>> = vec![Box::new(Hide), Box::new(Later)];
+    let receive = |packet: ClientboundPlayPacket| {
+        let mut cancel = false;
+        dispatch_client_packet_pre(&mut TestHost, &mods, &packet, &mut cancel);
+        cancel
+    };
+    let payload = |channel: &str| {
+        ClientboundPlayPacket::CustomPayload(CustomPayload {
+            channel: channel.into(),
+            data: vec![1],
+        })
+    };
+    assert!(!receive(ClientboundPlayPacket::Ping(Ping { id: 7 })));
+    assert!(receive(payload("mymod:hidden")));
+    assert!(!receive(payload("mymod:shown")));
+    // The cancelled packet never reached the later mod.
+    assert_eq!(*SEEN_BY_LATER.lock().unwrap(), ["mymod:shown"]);
+}

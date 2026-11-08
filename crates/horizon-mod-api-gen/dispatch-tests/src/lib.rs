@@ -41,6 +41,7 @@ mod tests {
         pub(super) struct NativeScreenView<'a>(pub &'a ());
         pub(super) struct NativeTextField;
         pub(super) struct ClientboundPlayPacket;
+        pub(super) struct ServerboundPlayPacket;
         pub(super) struct EntityDataValue;
         pub(super) struct NativeGenerate;
         pub(super) struct NativeProtoChunk<'a>(pub &'a ());

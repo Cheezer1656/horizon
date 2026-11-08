@@ -143,7 +143,7 @@ impl Game<'_> {
 
     /// `MultiPlayerGameMode.handleInventoryButtonClick`: the screen already
     /// ran `clickMenuButton` on its own menu.
-    pub(super) fn remote_station_button(&self, button: i32) {
+    pub(super) fn remote_station_button(&mut self, button: i32) {
         if let Some((container, _)) = self.remote.as_ref().and_then(|r| r.menu.as_ref())
             && self.remote_station_open(*container)
         {

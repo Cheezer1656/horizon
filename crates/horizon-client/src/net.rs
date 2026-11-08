@@ -368,6 +368,11 @@ impl Session {
             }
         }
     }
+    /// Whether `send` would put a play packet on the wire: the connection is
+    /// open and the server has not sent it back to configuration.
+    pub fn sending_play(&self) -> bool {
+        !self.configuring.load(Ordering::Relaxed) && self.writer.lock().unwrap().is_some()
+    }
     /// Send a play packet; silently dropped once the connection is gone,
     /// and while the server has the connection back in configuration (a
     /// proxy switching servers). Vanilla's `handleConfigurationStart` clears

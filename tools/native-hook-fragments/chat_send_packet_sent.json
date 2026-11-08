@@ -1,0 +1,27 @@
+{
+  "hooks": [
+    {
+      "name": "client_chat_send",
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_client_chat_send",
+      "neoforge": "ClientChatEvent",
+      "side": "client",
+      "cancellable": true,
+      "mod_api": {
+        "contract": "cancel",
+        "out": "cancel"
+      }
+    },
+    {
+      "name": "client_packet_sent",
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_client_packet_sent",
+      "side": "client",
+      "cancellable": true,
+      "mod_api": {
+        "contract": "cancel",
+        "out": "cancel"
+      }
+    }
+  ],
+  "rust_summary": "a chat line the player is about to send, and each play packet the client is about to send, both changeable or cancellable (`native_client_chat_send`, `native_client_packet_sent`).",
+  "doc_summary": "A chat line (not a command) the player typed is about to go out: `native_client_chat_send(message, cancel)`, NeoForge's `ClientChatEvent`. Change `message` to send other text (a rewrite left empty or starting with `/` is dropped), or set `cancel` to send nothing. And `native_client_packet_sent(packet, cancel)` hears each play packet the client sends (`ServerboundPlayPacket`), decoded, just before it goes out; set `cancel` to drop it. Packets a mod sends from that hook are not told again. Bundles need \"hooks\": @API:chat_send_packet_sent@."
+}

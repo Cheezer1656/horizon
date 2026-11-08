@@ -1388,7 +1388,7 @@ impl Game<'_> {
     /// ChatScreen.handleChatInput: the message comes in normalized
     /// (`normalizeChatMessage`: trimmed, whitespace runs collapsed, cut to the
     /// 256 UTF-16 units the packet holds), into history, then as a command or
-    /// a chat line. The Chat option's restrictions stop the message here too,
+    /// a chat line (which `native_client_chat_send` may change or cancel). The Chat option's restrictions stop the message here too,
     /// so a control-socket `chat` cannot send what the player's setting hides.
     pub(super) fn handle_chat_input(&mut self, message: &str) {
         let message = normalize_chat_message(message);
@@ -1396,6 +1396,14 @@ impl Game<'_> {
             return;
         }
         self.ui.chat.add_recent(&message);
+        // A chat line (not a command) goes to the mods first: ClientChatEvent.
+        let message = if message.starts_with('/') {
+            message
+        } else if let Some(message) = self.client_chat_to_send(message) {
+            message
+        } else {
+            return;
+        };
         // On a server (single player's own included) the server runs it,
         // unless a client mod owns the command.
         if self.remote.is_some() {

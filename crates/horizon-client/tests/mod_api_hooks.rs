@@ -734,3 +734,89 @@ fn wind_burst_filter_preserves_order_and_context() {
     );
     assert_eq!(blocks, vec![[3, 70, -2], [2, 70, -2]]);
 }
+
+#[test]
+fn sent_chat_is_rewritten_in_order_and_cancel_stops_later_mods() {
+    use horizon_client::mod_api::{ClientChatSendEvent, Flow, dispatch_client_chat_send};
+    struct TestHost;
+    impl Host for TestHost {}
+    struct Filter;
+    impl Hooks for Filter {
+        fn client_chat_send(
+            &self,
+            _host: &mut dyn Host,
+            event: &mut ClientChatSendEvent<'_>,
+        ) -> Flow {
+            if event.message.contains("secret") {
+                return Flow::Cancel;
+            }
+            *event.message = event.message.replace("darn", "****");
+            Flow::Continue
+        }
+    }
+    struct Signature;
+    impl Hooks for Signature {
+        fn client_chat_send(
+            &self,
+            _host: &mut dyn Host,
+            event: &mut ClientChatSendEvent<'_>,
+        ) -> Flow {
+            event.message.push_str(" (sent by mod)");
+            Flow::Continue
+        }
+    }
+    let mods: Vec<Box<dyn Hooks>> = vec![Box::new(Filter), Box::new(Signature)];
+    let send = |text: &str| {
+        let (mut message, mut cancel) = (text.to_owned(), false);
+        dispatch_client_chat_send(&mut TestHost, &mods, &mut message, &mut cancel);
+        (message, cancel)
+    };
+    assert_eq!(send("darn it"), ("**** it (sent by mod)".to_owned(), false));
+    // A cancelled line keeps its text: the second mod never ran.
+    assert_eq!(send("a secret"), ("a secret".to_owned(), true));
+}
+
+#[test]
+fn client_packet_sent_hands_a_mod_the_decoded_packet_and_can_drop_it() {
+    use horizon_client::mod_api::{
+        ClientPacketSentEvent, Flow, ServerboundPlayPacket, dispatch_client_packet_sent,
+    };
+    use horizon_protocol::packets::configuration::{CustomPayload, Ping};
+    use std::sync::Mutex;
+    static HEARD: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    struct TestHost;
+    impl Host for TestHost {}
+    // Drops a plugin channel's payloads and notes every packet it sees.
+    struct Block;
+    impl Hooks for Block {
+        fn client_packet_sent(
+            &self,
+            _host: &mut dyn Host,
+            event: &mut ClientPacketSentEvent<'_>,
+        ) -> Flow {
+            if let ServerboundPlayPacket::CustomPayload(p) = event.packet {
+                HEARD.lock().unwrap().push(p.channel.clone());
+                if p.channel == "spy:leak" {
+                    return Flow::Cancel;
+                }
+            }
+            Flow::Continue
+        }
+    }
+    let mods: Vec<Box<dyn Hooks>> = vec![Box::new(Block)];
+    let send = |packet: ServerboundPlayPacket| {
+        let mut cancel = false;
+        dispatch_client_packet_sent(&mut TestHost, &mods, &packet, &mut cancel);
+        cancel
+    };
+    let payload = |channel: &str| {
+        ServerboundPlayPacket::CustomPayload(CustomPayload {
+            channel: channel.into(),
+            data: vec![1],
+        })
+    };
+    assert!(!send(ServerboundPlayPacket::Pong(Ping { id: 7 })));
+    assert!(!send(payload("voicechat:ok")));
+    assert!(send(payload("spy:leak")));
+    assert_eq!(*HEARD.lock().unwrap(), ["voicechat:ok", "spy:leak"]);
+}

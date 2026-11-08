@@ -1012,12 +1012,13 @@ use horizon_client::mod_api::{AttachmentResult, Attachments, Holder, LayerDefini
 pub(crate) use horizon_client::mod_api::{
     ClientboundPlayPacket, NativeBlockRim, NativeColoredLight, NativeLootDrops, NativeMinimap,
     NativeMod, NativePanelEvent, NativeScreen, NativeScreenView, NativeStack, NativeZoom,
+    ServerboundPlayPacket,
 };
 use horizon_client::{
     atlas_sources::qualified,
     biome::{BiomeColors, SpawnEntry},
     block_entities::Pos,
-    chat::ChatSource,
+    chat::{ChatSource, normalize_chat_message},
     containers::{
         BlockEntity, MOD_MENUS, ModBlockEntity, ModBlockEntityFields, ModContainer,
         ModEnergyBuffer, ModFluidTanks,
@@ -8415,6 +8416,64 @@ impl Game<'_> {
     /// API 408.
     pub(super) fn native_client_packet(&mut self, packet: &ClientboundPlayPacket) {
         mod_api::dispatch_client_packet(self, mod_api::mods(), packet);
+    }
+    /// NeoForge's `ClientChatEvent`: a chat line (not a command) the player
+    /// typed is about to go out. `message` is the line as the chat box
+    /// normalizes it (trimmed, whitespace runs collapsed, at most 256 UTF-16
+    /// units); change it and the new text is sent (and, with no server, shown)
+    /// instead, or set `cancel` and nothing is sent. Told after the line is in
+    /// the chat history and before a server sees it; a rewrite is normalized
+    /// again, and one left empty or starting with `/` is dropped, so a mod
+    /// cannot turn a line into a command. A command (a line starting with `/`)
+    /// is not told: `native_command` covers the ones a mod owns. Lines a mod
+    /// sends with `send_chat`, a control-socket `chat` and a clicked command
+    /// are not told. Client-side. API @API:chat_send_packet_sent@.
+    pub(super) fn native_client_chat_send(&mut self, message: &mut String, cancel: &mut bool) {
+        mod_api::dispatch_client_chat_send(self, mod_api::mods(), message, cancel);
+    }
+    /// A play packet the client is about to send to the server, decoded, in
+    /// the order the game sends them: chat and commands, movement, container
+    /// clicks and closes, interactions, a mod's `send_packet` and plugin
+    /// payloads, all that go through the game's connection. Set `cancel` and
+    /// the packet is dropped (the game has already updated its own state as if
+    /// it went out, so cancelling a packet the game predicts, such as a
+    /// container click, can desynchronize it from the server). Packets a mod
+    /// sends from this hook are sent without being told again. Not told: the
+    /// connection's own replies that don't pass through the game (keep-alives,
+    /// pongs, resource pack answers, dialog click answers, far terrain
+    /// requests) and the configuration phase. Runs every tick for movement
+    /// and tick-end packets; with no mod loaded it costs one empty loop. The
+    /// packet is read-only. Client-side, on any server, single player's own
+    /// included. API @API:chat_send_packet_sent@.
+    pub(super) fn native_client_packet_sent(
+        &mut self,
+        packet: &ServerboundPlayPacket,
+        cancel: &mut bool,
+    ) {
+        mod_api::dispatch_client_packet_sent(self, mod_api::mods(), packet, cancel);
+    }
+    /// Whether `packet` goes out after `native_client_packet_sent`. A packet
+    /// a mod sends while the hook runs is not told again.
+    pub(super) fn client_packet_may_send(&mut self, packet: &ServerboundPlayPacket) -> bool {
+        if self.native_net.in_packet_sent {
+            return true;
+        }
+        self.native_net.in_packet_sent = true;
+        let mut cancel = false;
+        self.native_client_packet_sent(packet, &mut cancel);
+        self.native_net.in_packet_sent = false;
+        !cancel
+    }
+    /// A typed chat line after `native_client_chat_send`: `None` when a mod
+    /// took it, else the text to send.
+    pub(super) fn client_chat_to_send(&mut self, message: String) -> Option<String> {
+        let (mut message, mut cancel) = (message, false);
+        self.native_client_chat_send(&mut message, &mut cancel);
+        if cancel {
+            return None;
+        }
+        let message = normalize_chat_message(&message);
+        (!message.is_empty() && !message.starts_with('/')).then_some(message)
     }
     /// `dimension`'s level opened on the server (NeoForge's `LevelEvent.Load`,
     /// posted in `MinecraftServer.createLevels`): before any of its chunks

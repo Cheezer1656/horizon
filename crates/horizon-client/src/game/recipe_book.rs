@@ -817,7 +817,7 @@ impl Game<'_> {
         self.recipe_ui.search_drag = false;
     }
     /// `RecipeBookComponent.sendUpdateSettings`: the server owns the saved book.
-    fn send_book_settings(&self, book_type: BookType) {
+    fn send_book_settings(&mut self, book_type: BookType) {
         self.send(
             horizon_protocol::packets::play::Serverbound::RecipeBookChangeSettings(
                 horizon_protocol::packets::recipes::RecipeBookChangeSettings {

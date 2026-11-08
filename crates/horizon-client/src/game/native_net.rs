@@ -35,6 +35,8 @@ pub(super) struct NativeNet {
     payloads_from: Vec<(u128, String, Vec<u8>)>,
     /// What `native_send_custom_payload_to_player` sent this tick: player, channel, data.
     payloads_to: Vec<(u128, String, Vec<u8>)>,
+    /// `native_client_packet_sent` is running: packets a mod sends from it pass unheard.
+    pub(super) in_packet_sent: bool,
 }
 
 /// `ClientboundCustomPayloadPacket.MAX_PAYLOAD_SIZE`.

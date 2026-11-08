@@ -11219,7 +11219,7 @@ impl Game<'_> {
         argb: u32,
         shadow: bool,
     ) -> f32 {
-        if !(scale.is_finite() && scale > 0.0) {
+        if scale.is_nan() || scale.is_infinite() || scale <= 0.0 {
             return 0.0;
         }
         let [x, y] = at;

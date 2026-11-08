@@ -845,7 +845,8 @@ impl Game<'_> {
         if let Some(slot) = self.slot_at(batch, self.cursor.0, self.cursor.1)
             && tooltip.is_none()
         {
-            tooltip = self.slot_mut(slot).clone();
+            let stack = self.slot_mut(slot).clone();
+            tooltip = self.menu_slot_shown(slot, &stack).into_owned();
         }
         // An out-of-stock trade: "the villager needs to restock" over the
         // result (isHovering(186, 35, 22, 21), canRestock).

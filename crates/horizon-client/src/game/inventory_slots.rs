@@ -23,6 +23,7 @@ impl Game<'_> {
         y: f32,
     ) {
         let carried;
+        let shown;
         let (stack, capped) = match drag.and_then(|d| d.slots.get(&slot)) {
             Some(None) => return,
             Some(Some((count, capped))) => {
@@ -33,7 +34,10 @@ impl Game<'_> {
                     .map(|c| ItemStack { count: *count, ..c });
                 (carried.as_ref(), *capped)
             }
-            None => (stack.as_ref(), false),
+            None => {
+                shown = self.menu_slot_shown(slot, stack);
+                ((*shown).as_ref(), false)
+            }
         };
         if let Some(stack) = stack {
             self.draw_item_model(batch, stack, x, y);

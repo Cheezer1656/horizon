@@ -1,0 +1,18 @@
+{
+  "hooks": [
+    {
+      "name": "menu_slot_display",
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_menu_slot_display",
+      "side": "client",
+      "cancellable": false,
+      "mod_api": {
+        "contract": "listen"
+      }
+    }
+  ],
+  "rust_summary": "the stack a server-opened menu draws in a slot (`native_menu_slot_display`).",
+  "doc_summary": "`native_menu_slot_display(slot, stack)` is asked, on a client, for each slot of a server-opened menu the window draws, and for the hovered slot's tooltip. `slot` is the server's slot number (the order of `host.menu_stacks()`); `stack` arrives holding what the slot holds, and a mod may replace it or set `None` to draw the slot empty. Only the picture and the tooltip change: clicks, quick moves, quick-craft drags and `menu_stacks()` see the real stack. It is not asked for the window's own inventory (no server-opened menu) or the creative screen. Bundles need \"hooks\": @API:menu_slot_display@.",
+  "comments": [
+    "crates/horizon-client/src/game/native_menu_stacks.rs"
+  ]
+}

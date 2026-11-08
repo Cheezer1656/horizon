@@ -581,14 +581,16 @@ impl Game<'_> {
         self.draw_hovered_slot_highlight(batch, false, ox, oy);
         for i in slots {
             let (sx, sy) = self.slot_position(i);
-            if let Some(stack) = self.slot_mut(i).clone() {
-                self.draw_item(batch, &stack, ox + sx, oy + sy);
+            let stack = self.slot_mut(i).clone();
+            if let Some(stack) = self.menu_slot_shown(i, &stack).as_ref() {
+                self.draw_item(batch, stack, ox + sx, oy + sy);
             }
         }
         self.draw_hovered_slot_highlight(batch, true, ox, oy);
         let mut stack_tip = None;
         if let Some(slot) = self.slot_at(batch, self.cursor.0, self.cursor.1) {
-            stack_tip = self.slot_mut(slot).clone();
+            let stack = self.slot_mut(slot).clone();
+            stack_tip = self.menu_slot_shown(slot, &stack).into_owned();
         }
         if self.carried.is_some() {
             self.draw_carried(batch);

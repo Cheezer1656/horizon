@@ -3775,6 +3775,23 @@ chest's own slots, then the player's inventory, then the hotbar; an empty slot i
 counts the slots, this lists them. It is `None` on a server, while no server-opened menu is up (the window's own
 inventory, creative) and for a menu whose slots the client doesn't lay out (a lectern).
 
+`native_menu_slot_display(slot, stack)` (client, API @API:menu_slot_display@) changes what a server-opened menu *draws* in a
+slot, as a mod that mixes into `Container.getItem` does for display. `slot` is the server's slot number, the order of
+`host.menu_stacks()`. `stack` arrives holding the slot's stack; replace it, or set it to `None` to draw the slot empty.
+It runs for the slot's icon and decorations and for the hover tooltip, each frame, and only when a mod is installed.
+Clicks, quick moves, quick-craft drags and `menu_stacks()` still see the real stack, so the menu's state is unchanged.
+A quick-craft drag preview in a slot shows the drag's stack instead. It is not asked while no server-opened menu is up
+(the window's own inventory, creative).
+
+```rust
+fn menu_slot_display(&self, _: &dyn Host, event: &mut MenuSlotDisplayEvent<'_>) {
+    // Hide the filler panes of a chest menu.
+    if event.stack.as_ref().is_some_and(|s| &*s.item == "minecraft:gray_stained_glass_pane") {
+        *event.stack = None;
+    }
+}
+```
+
 Each read is a `Host` method too (`host.entity_position(entity)`): a helper whose catalog entry names a `receiver`
 (`entity`, `level`) also becomes a method of that handle.
 

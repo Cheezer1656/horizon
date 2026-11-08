@@ -338,6 +338,30 @@ mod tests {
     }
 
     #[test]
+    fn menu_slot_display_mods_replace_or_empty_the_slot_in_order() {
+        struct Display(usize);
+        impl Hooks for Display {
+            fn menu_slot_display(&self, _: &dyn Host, event: &mut MenuSlotDisplayEvent<'_>) {
+                // The first mod empties its slot; the second fills an empty one.
+                if self.0 == 1 && event.slot == 3 {
+                    *event.stack = None;
+                } else if self.0 == 2 && event.stack.is_none() && event.slot >= 3 {
+                    *event.stack = Some(ItemStack);
+                }
+            }
+        }
+        let mods: Vec<Box<dyn Hooks>> = vec![Box::new(Display(1)), Box::new(Display(2))];
+        for (slot, held, expected) in [(2, false, false), (2, true, true), (3, true, true)] {
+            let mut stack = held.then_some(ItemStack);
+            dispatch_menu_slot_display(&TestHost, &mods, slot, &mut stack);
+            assert_eq!(stack.is_some(), expected, "slot {slot}, held {held}");
+        }
+        let mut stack = Some(ItemStack);
+        dispatch_menu_slot_display(&TestHost, &[], 3, &mut stack);
+        assert!(stack.is_some());
+    }
+
+    #[test]
     fn slot_rules_mutate_and_item_tick_can_cancel() {
         let mods: Vec<Box<dyn Hooks>> = vec![Box::new(Mod {
             id: 1,

@@ -385,7 +385,12 @@ impl Game<'_> {
         self.random_tick_sections.clear();
         self.portals.sections.clear();
         self.options.resources = root.clone();
+        // A native mod's block models (state ids don't move) outlive the reload.
+        let block_models = self.pack.context.block_models.clone();
         self.pack = pack;
+        if !block_models.is_empty() {
+            self.pack.context = self.pack.context_with_block_models(block_models);
+        }
         self.gui = gui;
         // The new atlas's skin and map slots are blank: players and maps
         // upload into it again instead of naming sprites it does not have.

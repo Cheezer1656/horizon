@@ -4060,6 +4060,27 @@ explosion's centre (camera-relative, from `frame.camera_position`) and its age i
 ray marched in a post pass against `scene_depth`. A value that isn't finite reads as 0, and all are 0 when no mod sets
 them. The mod's server half can send what happened to each client half with mod messages (API 40).
 
+### Block appearance on the client
+
+`crates/horizon-client/src/game/native_block_models.rs`: the block state the loaded terrain draws a state as, for a
+recoloured ore (mining highlights), a hidden block or a plain stand-in (NeoForge's and Fabric's block model overrides,
+`BlockStateModelSet.get`).
+
+- `native_client_block_model(state, model)` (client) comes in with `model` equal to `state`. Set it to another state and
+  the terrain draws that state's model, tint, culling, occlusion and light in its place. Setting air hides the block.
+  Mods run in order, so a later mod sees an earlier mod's answer in `model`.
+- It is asked for every block state (air excepted) when a mod calls `native_refresh_block_models()`, not per block or
+  per frame, so the answer depends on the state and on what the mod keeps (an area, a toggle), not on a position. When
+  the answers differ from those in use, every loaded section is rebuilt with them, as changing Biome Blend does. Call it
+  when your answers change and once when the player joins, not every tick: a rebuild takes the workers a few seconds.
+  With no mod answering, the mesher does nothing extra.
+- The answers survive resource reloads and world changes. An id past the registry is ignored.
+- Drawing of the loaded terrain only. Collision, the block outline, breaking and walking particles, block entities'
+  own drawing, the far terrain and fluids' own rendering (a lava stand-in) keep the real state, and so do the world's
+  blocks, what the server and other players see.
+- Cost: with the table in use, one array lookup per cell of a padded section on the mesh workers (about 64,000 per
+  section); a refresh costs one hook call per block state (about 30,000) on the main thread.
+
 ### Biome colours
 
 `crates/horizon-client/src/game/native_biome_colors.rs`: the grass, leaf and water colours a client mod changes while the

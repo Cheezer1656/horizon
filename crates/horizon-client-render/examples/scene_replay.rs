@@ -663,6 +663,7 @@ fn remesh(
                         cutout_leaves,
                         opaque_ice: false,
                         translucent_layers: &[],
+                        block_models: &[],
                         leaf_culling,
                     };
                     let mut scratch = MeshScratch::default();

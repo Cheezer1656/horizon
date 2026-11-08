@@ -194,6 +194,40 @@ fn received_chat_is_replaced_in_order_and_cancel_stops_later_mods() {
 }
 
 #[test]
+fn client_block_models_are_chosen_by_later_mods_from_earlier_answers() {
+    use horizon_client::mod_api::{ClientBlockModelEvent, dispatch_client_block_model};
+    use horizon_world::registry::BlockStateId;
+    struct TestHost;
+    impl Host for TestHost {}
+    struct Swap;
+    impl Hooks for Swap {
+        fn client_block_model(&self, _host: &dyn Host, event: &mut ClientBlockModelEvent<'_>) {
+            if event.state.0 == 5 {
+                *event.model = BlockStateId(9);
+            }
+        }
+    }
+    struct Hide;
+    impl Hooks for Hide {
+        fn client_block_model(&self, _host: &dyn Host, event: &mut ClientBlockModelEvent<'_>) {
+            if event.model.0 == 9 {
+                *event.model = BlockStateId(0);
+            }
+        }
+    }
+    let ask = |mods: &[Box<dyn Hooks>], id| {
+        let mut model = BlockStateId(id);
+        dispatch_client_block_model(&TestHost, mods, BlockStateId(id), &mut model);
+        model.0
+    };
+    assert_eq!(ask(&[], 5), 5);
+    let mods: Vec<Box<dyn Hooks>> = vec![Box::new(Swap)];
+    assert_eq!((ask(&mods, 5), ask(&mods, 6)), (9, 6));
+    let mods: Vec<Box<dyn Hooks>> = vec![Box::new(Swap), Box::new(Hide)];
+    assert_eq!((ask(&mods, 5), ask(&mods, 6)), (0, 6));
+}
+
+#[test]
 fn client_packet_hands_a_mod_the_decoded_packet() {
     use horizon_client::mod_api::{
         ClientPacketEvent, ClientboundPlayPacket, dispatch_client_packet,

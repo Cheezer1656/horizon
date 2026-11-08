@@ -1238,6 +1238,21 @@ const OFFSETS: [isize; 6] = {
     }
     out
 };
+/// Replaces each state in `blocks` by the one `models` says it is drawn as: what the player sees
+/// (faces, culling, occlusion, light) follows the replacement, the world's blocks stay. Air stays
+/// air, and a state `models` doesn't reach draws as itself.
+fn remodel(blocks: &mut [u32], models: &[u32]) {
+    if models.is_empty() {
+        return;
+    }
+    for id in blocks {
+        if *id != 0
+            && let Some(&model) = models.get(*id as usize)
+        {
+            *id = model;
+        }
+    }
+}
 /// Per-worker temporary arrays. They never hold resource-pack references or
 /// geometry still owned by the renderer, and total about 150 KiB per worker
 /// (the leaf mask adds 8,000 cells, depths and a queue).
@@ -1687,6 +1702,9 @@ pub struct Mesher<'a> {
     pub opaque_ice: bool,
     /// Sprite layers a shader pack moves into the translucent pass, by layer.
     pub translucent_layers: &'a [bool],
+    /// What each block state is drawn as, by state id (a native mod's client block models); a
+    /// state past its end, and air, draw as themselves, and none at all draws every state so.
+    pub block_models: &'a [u32],
     /// What the worker does with leaf faces inside a canopy.
     pub leaf_culling: LeafCullingMode,
 }
@@ -1717,6 +1735,7 @@ impl Mesher<'_> {
         }
         let own = scratch.own.get_or_insert_with(|| Box::new([0; 4096]));
         scratch.padded.fill(region, sy, own);
+        remodel(&mut scratch.padded.blocks, self.block_models);
         let pad = &scratch.padded;
         solid_rows(pad, &self.tables.solid, &mut scratch.solid_rows);
         let opaque = &scratch.solid_rows;

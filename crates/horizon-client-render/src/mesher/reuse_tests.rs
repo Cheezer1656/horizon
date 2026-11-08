@@ -85,6 +85,31 @@ fn padded_reuse_resets_missing_neighbors_and_matches_chunk_reads_across_layouts(
 }
 
 #[test]
+fn block_models_replace_states_in_the_padded_section_only() {
+    let layout = crate::chunk::ColumnLayout::new(0, 32).unwrap();
+    let mut chunk = Chunk::with_layout(0, 0, layout);
+    chunk.set(1, 1, 1, 2);
+    chunk.set(2, 1, 1, 3);
+    chunk.set(3, 1, 1, 9);
+    let mut region = [[None; 3]; 3];
+    region[1][1] = Some(&chunk);
+    let mut pad = Padded::default();
+    pad.fill(&region, 0, &mut Box::new([0; 4096]));
+    // State 2 is drawn as 5, 3 as air; 0 (air) says 7 but stays air; 9 is past the table.
+    remodel(&mut pad.blocks, &[7, 4, 5, 0]);
+    assert_eq!(pad.blocks[pi(1, 1, 1)], 5);
+    assert_eq!(pad.blocks[pi(2, 1, 1)], 0);
+    assert_eq!(pad.blocks[pi(3, 1, 1)], 9);
+    assert_eq!(pad.blocks[pi(0, 0, 0)], 0);
+    // The world's block is untouched.
+    assert_eq!(chunk.get(1, 1, 1), 2);
+    // No table: every state is itself.
+    let mut same = [2, 3, 0, 9];
+    remodel(&mut same, &[]);
+    assert_eq!(same, [2, 3, 0, 9]);
+}
+
+#[test]
 fn padded_fill_reads_every_neighbour_and_its_light_like_chunk_reads() {
     let mut state = 0x2545_F491_4F6C_DD1Du64;
     let mut next = move || {
@@ -183,6 +208,7 @@ fn a_shader_pack_lights_the_faces_itself() {
             cutout_leaves: true,
             opaque_ice: false,
             translucent_layers: &[],
+            block_models: &[],
             leaf_culling: LeafCullingMode::Off,
         };
         let mut colours: Vec<u32> = mesher
@@ -240,6 +266,7 @@ fn a_shader_pack_lights_every_nether_face_like_an_up_face() {
             cutout_leaves: true,
             opaque_ice: false,
             translucent_layers: &[],
+            block_models: &[],
             leaf_culling: LeafCullingMode::Off,
         };
         let mesh = mesher.mesh(&region, 0);
@@ -293,6 +320,7 @@ fn separate_ao_passes_ao_in_alpha_without_darkening_rgb() {
         cutout_leaves: true,
         opaque_ice: false,
         translucent_layers: &[],
+        block_models: &[],
         leaf_culling: LeafCullingMode::Off,
     };
     let mesh = mesher.mesh(&region, 0);
@@ -369,6 +397,7 @@ fn reused_mesh_matches_fresh_geometry_across_sections_and_resource_reload() {
             cutout_leaves: reload == 0,
             opaque_ice: false,
             translucent_layers: &[],
+            block_models: &[],
             leaf_culling: LeafCullingMode::Off,
         };
         for (case, (center, east)) in [
@@ -519,6 +548,7 @@ fn a_shader_pack_s_still_water_top_starts_at_its_south_west_corner() {
             cutout_leaves: true,
             opaque_ice: false,
             translucent_layers: &[],
+            block_models: &[],
             leaf_culling: LeafCullingMode::Off,
         };
         let mesh = mesher.mesh(&region, 0);

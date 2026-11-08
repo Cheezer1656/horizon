@@ -69,6 +69,7 @@ fn a_tall_column_streams_lights_and_meshes_to_its_top() {
     let facts = BlockFacts::load(&root, assets.registry).unwrap();
     let visibility = models::load_visibility(&root, assets.registry).unwrap();
     let context = Arc::new(WorkerContext {
+        block_models: Arc::default(),
         tables: Arc::new(MeshTables::new(&assets, &render, &facts, visibility).unwrap()),
         light: Arc::new(LightTables::load(&root, assets.registry, &facts).unwrap()),
         biomes: Arc::new(Biomes::load(&root).unwrap()),
@@ -137,6 +138,7 @@ fn a_tall_column_streams_lights_and_meshes_to_its_top() {
             cutout_leaves: true,
             opaque_ice: false,
             translucent_layers: &[],
+            block_models: &[],
             leaf_culling: LeafCullingMode::Off,
             assets: &context.assets,
             render: &context.render,

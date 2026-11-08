@@ -4405,6 +4405,16 @@ chat) is the mod's to get right. It is an error when the player isn't in a serve
 joined yet or being reconfigured), and for a custom payload over the limit. Mod messages between the halves of one
 Horizon mod stay with `native_net_send_to_server`. Bundles need `"hooks": 409`.
 
+The structs and enums inside the play packets (`BossEvent` and its `BossAction`, `TeamParameters`, `PlayerInfo`,
+`NumberFormat`, `Text` as the title packets carry it, and the rest of Horizon's `play` module) are in
+`mod_api::packets`, so a mod's `[api]` crate, which depends on `horizon-client` alone, can match a nested enum in a
+packet `client_packet` hands over and build a packet for `native_send_packet`:
+`ServerboundPlayPacket::CustomPayload(packets::CustomPayload { channel, data })`. The packets the play state shares with
+the configuration state (`CustomPayload`, `Ping`, `KeepAlive`, `Disconnect`, the cookie, resource pack, transfer and
+server links packets, `UpdateTags`, `ClientInformation`, `CustomClickAction`) are there too. They are the protocol
+crate's own types, so they follow it between game versions. This is a re-export and needs no API number;
+`packets::Text` is not `mod_api::Text`.
+
 ### Screenshots a client mod takes
 
 API @API:take_screenshot@, `crates/horizon-client/src/game/native_client_services.rs`: `native_take_screenshot()` takes a

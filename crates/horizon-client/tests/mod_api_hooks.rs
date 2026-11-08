@@ -734,3 +734,48 @@ fn wind_burst_filter_preserves_order_and_context() {
     );
     assert_eq!(blocks, vec![[3, 70, -2], [2, 70, -2]]);
 }
+
+#[test]
+fn play_packet_types_are_named_by_mod_api() {
+    use horizon_client::mod_api::{
+        ClientPacketEvent, ClientboundPlayPacket, ServerboundPlayPacket, dispatch_client_packet,
+        packets::{BossAction, BossEvent, CustomPayload},
+    };
+    use std::sync::Mutex;
+    static PROGRESS: Mutex<Vec<f32>> = Mutex::new(Vec::new());
+    struct TestHost;
+    impl Host for TestHost {}
+    // A boss bar listener: it matches the nested `BossAction` by the names
+    // `mod_api::packets` exports, with no `horizon_protocol` dependency.
+    struct Bars;
+    impl Hooks for Bars {
+        fn client_packet(&self, _host: &mut dyn Host, event: &mut ClientPacketEvent<'_>) {
+            if let ClientboundPlayPacket::BossEvent(BossEvent {
+                action: BossAction::UpdateProgress { progress },
+                ..
+            }) = event.packet
+            {
+                PROGRESS.lock().unwrap().push(*progress);
+            }
+        }
+    }
+    let mods: Vec<Box<dyn Hooks>> = vec![Box::new(Bars)];
+    for action in [
+        BossAction::Remove,
+        BossAction::UpdateProgress { progress: 0.5 },
+    ] {
+        dispatch_client_packet(
+            &mut TestHost,
+            &mods,
+            &ClientboundPlayPacket::BossEvent(BossEvent { id: 1, action }),
+        );
+    }
+    assert_eq!(*PROGRESS.lock().unwrap(), [0.5]);
+
+    // A serverbound custom payload builds from the same module.
+    let register = ServerboundPlayPacket::CustomPayload(CustomPayload {
+        channel: "minecraft:register".into(),
+        data: b"hypixel:register\0".to_vec(),
+    });
+    assert!(matches!(register, ServerboundPlayPacket::CustomPayload(_)));
+}

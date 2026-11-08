@@ -83,6 +83,21 @@ pub use horizon_protocol::entity_data::Value as EntityDataValue;
 pub use horizon_protocol::packets::play::Clientbound as ClientboundPlayPacket;
 /// The play packets a client sends, as `native_send_packet` takes them.
 pub use horizon_protocol::packets::play::Serverbound as ServerboundPlayPacket;
+/// The types inside the play packets, to match what `client_packet` hands over
+/// and to build what `native_send_packet` takes: `packets::BossEvent`, its
+/// `packets::BossAction`, `packets::TeamParameters`, `packets::PlayerInfo`,
+/// `packets::NumberFormat` and the rest of Horizon's `play` module. The packets
+/// the play state shares with the configuration state (`CustomPayload`, `Ping`,
+/// `Disconnect`, `CookieRequest` and the like) are here too. A mod's `[api]`
+/// crate depends on `horizon-client` alone, so these can't be named otherwise.
+pub mod packets {
+    pub use horizon_protocol::packets::configuration::{
+        ClientInformation, CookieRequest, CookieResponse, CustomClickAction, CustomPayload,
+        Disconnect, KeepAlive, Ping, ResourcePackPop, ResourcePackPush, ResourcePackResponse,
+        ServerLinks, StoreCookie, Transfer, UpdateTags,
+    };
+    pub use horizon_protocol::packets::play::*;
+}
 pub use horizon_world::consumable::UseAnimation;
 /// Vanilla's `TagParser`: the tag an SNBT text holds and the bytes it read
 /// (`ItemStack::from_nbt` reads an item from it). API @API:item_from_snbt@.

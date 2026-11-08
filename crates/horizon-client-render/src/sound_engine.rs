@@ -1351,11 +1351,37 @@ impl SoundEngine {
         let id = self.add(instance, retain);
         (id, self.play(id, backend))
     }
+    /// What native mods make of a sound about to start (`PlaySoundEvent`): they may change its volume
+    /// and pitch, or cancel it (false). Asked before the sound is chosen, so a cancelled sound
+    /// draws nothing from the instance's random.
+    fn native_sound_allowed(&mut self, id: InstanceId) -> bool {
+        if !crate::gfx::native_render::render_hooked() {
+            return true;
+        }
+        let instance = self.instances.get_mut(&id).expect("present");
+        let source = crate::settings::SOUND_SOURCES
+            .get(instance.source)
+            .copied()
+            .unwrap_or("master");
+        let mut cancel = false;
+        crate::gfx::native_render::native_client_sound(
+            &instance.identifier,
+            source,
+            instance.position,
+            &mut instance.volume,
+            &mut instance.pitch,
+            &mut cancel,
+        );
+        !cancel
+    }
     fn play_inner(&mut self, id: InstanceId, backend: &mut impl Backend) -> PlayResult {
         if !self.loaded || !self.instances.contains_key(&id) {
             return PlayResult::NotStarted;
         }
         if !self.instances[&id].can_play_sound() {
+            return PlayResult::NotStarted;
+        }
+        if !self.native_sound_allowed(id) {
             return PlayResult::NotStarted;
         }
         self.resolve(id);
@@ -1956,6 +1982,38 @@ mod tests {
         };
         assert_eq!(picks(false), 2, "both variants come up across plays");
         assert_eq!(picks(true), 1, "the chosen sound is kept");
+    }
+    #[test]
+    fn native_mods_mute_and_change_a_sound_as_it_starts() {
+        use test_backend::Null;
+        crate::gfx::native_render::fixture::install_fixture();
+        let mut registry = SoundRegistry::default();
+        registry.add_file(
+            "minecraft",
+            br#"{"fixture.muted": {"sounds": ["dig/stone1"]},
+                 "fixture.quiet": {"sounds": ["dig/stone1"]},
+                 "fixture.plain": {"sounds": ["dig/stone1"]}}"#,
+            &|_, _| true,
+        );
+        let mut engine = SoundEngine::new(registry);
+        let mut backend = Null::default();
+        let mut play = |event: &str| {
+            let source = crate::settings::sound_source(event);
+            let instance =
+                SoundInstance::at(event, source, 1.0, 1.0, LegacyRandom::new(1), [0.0; 3]);
+            engine.play_new(instance, false, &mut backend).1
+        };
+        assert_eq!(play("minecraft:fixture.muted"), PlayResult::NotStarted);
+        assert_eq!(play("minecraft:fixture.plain"), PlayResult::Started);
+        assert_eq!(play("minecraft:fixture.quiet"), PlayResult::Started);
+        let mut volumes: Vec<f32> = backend.volume.values().copied().collect();
+        volumes.sort_by(f32::total_cmp);
+        assert_eq!(volumes.len(), 2, "the muted sound took no channel");
+        assert_eq!(
+            volumes[0] * 2.0,
+            volumes[1],
+            "one is the plain sound at half volume"
+        );
     }
     #[test]
     fn world_sounds_leave_channels_for_the_listener_only_with_the_extra() {

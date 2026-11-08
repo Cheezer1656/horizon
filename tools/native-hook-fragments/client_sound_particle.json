@@ -1,0 +1,30 @@
+{
+  "hooks": [
+    {
+      "name": "client_sound",
+      "target": "horizon_client_render::gfx::native_render::native_client_sound",
+      "neoforge": "PlaySoundEvent",
+      "side": "client",
+      "cancellable": true,
+      "mod_api": {
+        "contract": "collect",
+        "out": "cancel"
+      }
+    },
+    {
+      "name": "client_particle",
+      "target": "horizon_client_render::gfx::native_render::native_client_particle",
+      "side": "client",
+      "cancellable": true,
+      "mod_api": {
+        "contract": "collect",
+        "out": "cancel"
+      }
+    }
+  ],
+  "rust_summary": "the sounds and particles a client makes, changeable or cancellable (`native_client_sound`, `native_client_particle`).",
+  "doc_summary": "the sounds and particles a client makes, on `RenderHooks`: `client_sound(sound, source, at, volume, pitch, cancel)` is NeoForge's `PlaySoundEvent`, asked as any sound starts (those the server sent and the client's own: block fire, blaze smoke, break effects), and a mod changes its `volume` and `pitch` or sets `cancel`; `client_particle(particle, at, velocity, cancel)` is asked as the client makes a particle, and a mod sets `cancel` to hide it. They change only what this client hears and draws. Bundles need \"hooks\": @API:client_sound_particle@.",
+  "comments": [
+    "crates/horizon-client-render/src/gfx/native_render.rs"
+  ]
+}

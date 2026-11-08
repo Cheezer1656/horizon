@@ -32,6 +32,26 @@ pub mod polytone;
 mod polytone_gpu;
 pub use native::{ParticleController, ParticleUpdate};
 
+/// Whether a native mod cancels this particle (`native_client_particle`), asked as the engine is
+/// about to make it. Without mods, only a check.
+fn native_cancels(options: &ParticleOptions, p: [f64; 3], v: [f64; 3]) -> bool {
+    use crate::gfx::native_render::{native_client_particle, render_hooked};
+    if !render_hooked() {
+        return false;
+    }
+    let mut cancel = false;
+    match &options.mod_particle {
+        Some(name) => native_client_particle(name, p, v, &mut cancel),
+        None => native_client_particle(
+            &format!("minecraft:{}", options.ty.name()),
+            p,
+            v,
+            &mut cancel,
+        ),
+    }
+    cancel
+}
+
 /// `ParticleOptions` with the parameters of the option classes used here.
 #[derive(Clone, Debug)]
 pub struct ParticleOptions {
@@ -1990,6 +2010,9 @@ impl ParticleEngine {
     pub fn create(&mut self, options: &ParticleOptions, p: [f64; 3], v: [f64; 3]) {
         if let Some(requests) = &mut self.created_requests {
             requests.push((options.clone(), p, v));
+            return;
+        }
+        if native_cancels(options, p, v) {
             return;
         }
         let seed = self.seeds.next_long();
@@ -5103,6 +5126,22 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn native_mods_cancel_a_particle_before_it_is_made() {
+        crate::gfx::native_render::fixture::install_fixture();
+        let hidden = crate::gfx::native_render::fixture::HIDDEN_VELOCITY;
+        let flame = ParticleOptions::simple(ParticleType::Flame);
+        assert!(native_cancels(&flame, [0.0; 3], hidden));
+        assert!(!native_cancels(&flame, [0.0; 3], [0.0; 3]));
+        let mut engine = ParticleEngine::new(Path::new(""), &HashMap::new(), &HashSet::new());
+        let mut made = |velocity| {
+            engine.create(&flame, [0.0; 3], velocity);
+            engine.made().get("flame").copied().unwrap_or(0)
+        };
+        assert_eq!(made(hidden), 0);
+        assert_eq!(made([0.0; 3]), 1);
     }
 
     #[test]

@@ -4976,7 +4976,47 @@ For frame hooks, implement `RenderHooks` and return it from `Hooks::render`. The
 renderer list is installed once alongside the mod list. `render_needs` collects requests;
 `world_drawn` observes the world pass and can encode drawing before the hand and HUD. Both
 run on the render thread while the frame is built, before any deferred GPU submission.
+`client_sound` and `client_particle` are asked on the game's thread, not the render pass: `client_sound` as any
+sound starts, `client_particle` as any particle is made (see [Client sounds and particles](#client-sounds-and-particles)).
 The renderer module re-exports the game's wgpu types.
+
+### Client sounds and particles
+
+`RenderHooks::client_sound` and `RenderHooks::client_particle` let a client mod mute, change or hide what the client
+makes itself. Sounds and particles the server sent go the same way, so one hook covers block fire, blaze smoke,
+projectile trails and break effects whether they came from a packet or from the client. Neither changes what other
+players hear or see. Both hooks run on every sound or particle, so keep the handler to a string compare.
+
+| Hook | Field | Meaning |
+|---|---|---|
+| `client_sound` | `sound` | The sound event's id (`minecraft:block.fire.ambient`) |
+| | `source` | The sound category: `master`, `music`, `record`, `weather`, `block`, `hostile`, `neutral`, `player`, `ambient`, `voice`, `ui` |
+| | `at` | Where it plays; for a sound that follows the listener (UI, music) the listener-relative offset |
+| | `volume`, `pitch` | The instance's own, before the category volume and the sound file's variation; change them |
+| | `cancel` | Set it and nothing plays, with no subtitle |
+| `client_particle` | `particle` | The particle type's id (`minecraft:flame`, or a mod's own `mymod:spark`) |
+| | `at`, `velocity` | Where it appears and how it starts |
+| | `cancel` | Set it and the particle is not made |
+
+Every mod is asked in order and all see `cancel` (a mod that wants to keep a sound another cancelled can read it
+and leave it). `client_sound` is asked once as a sound starts, so a looping or entity-bound sound is not asked again
+while it plays, and a sound that waits (`native_play_local_sound`'s `delay`) is asked when the wait ends.
+`client_particle` is asked after the Particles option and the 32 block range, so it only sees particles that would
+have been drawn. With no mod listening, each costs one check.
+
+```rust
+use horizon_client::mod_api::{ClientSoundEvent, RenderHooks};
+struct Quiet;
+impl RenderHooks for Quiet {
+    fn client_sound(&self, event: &mut ClientSoundEvent<'_>) {
+        if event.sound.starts_with("minecraft:block.fire.") {
+            event.cancel = true;
+        }
+    }
+}
+```
+
+Return `Some(&Quiet)` from `Hooks::render` to install it.
 
 ### The typed API from mixin code
 

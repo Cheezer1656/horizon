@@ -15,7 +15,8 @@ mod generated {
     include!(concat!(env!("OUT_DIR"), "/native_render_generated.rs"));
 }
 pub use generated::{
-    HandDrawnEvent, RenderHooks, RenderNeedsEvent, WorldDrawnEvent, WorldWarpEvent,
+    ClientParticleEvent, ClientSoundEvent, HandDrawnEvent, RenderHooks, RenderNeedsEvent,
+    WorldDrawnEvent, WorldWarpEvent,
 };
 pub use wgpu;
 
@@ -167,6 +168,63 @@ pub fn native_hand_drawn(hand: &mut HandDrawn<'_>) {
     generated::dispatch_hand_drawn(RENDERERS.get().map_or(&[], |renderers| renderers), hand);
 }
 
+/// This client is about to play a sound (`SoundEngine.play`, what NeoForge's `PlaySoundEvent` fires
+/// on): every sound the client plays, those the server sent and those it makes itself, such as block
+/// fire, blaze smoke, a projectile's trail or break effects. `sound` is the sound event's id
+/// (`minecraft:block.fire.ambient`), `source` the sound category it plays on (`block`, `music`,
+/// `ui`; the `soundCategory_*` option names), `at` where it plays (the listener's offset when it
+/// follows the listener, as UI sounds and music do) and `volume` and `pitch` the instance's own,
+/// before the category volume and the sound file's variation. Change `volume` or `pitch`, or set
+/// `cancel` to silence it: nothing plays, with no subtitle either. A sound that loops or follows an
+/// entity is asked once, as it starts. It changes only what this client hears: sounds shared with
+/// guests or sent to other players are untouched. Not called on a game with no sound output
+/// (a dedicated server). API @API:client_sound_particle@.
+#[inline(never)]
+pub fn native_client_sound(
+    sound: &str,
+    source: &str,
+    at: [f64; 3],
+    volume: &mut f32,
+    pitch: &mut f32,
+    cancel: &mut bool,
+) {
+    generated::dispatch_client_sound(
+        RENDERERS.get().map_or(&[], |renderers| renderers),
+        sound,
+        source,
+        at,
+        volume,
+        pitch,
+        cancel,
+    );
+}
+
+/// This client is about to make a particle (`ClientLevel.addParticle`, after the Particles option
+/// and the 32 block range have thinned them): the ones the server sent and those the client makes
+/// itself, such as block fire's smoke, blaze smoke, a projectile's trail or a block's break
+/// effects. `particle` is the particle type's id (`minecraft:flame`, or a mod's own,
+/// `mymod:spark`), `at` where it appears and `velocity` how it starts. Set `cancel` and it is not
+/// made. It changes only what this client draws. Use [`render_hooked`] to skip the work of
+/// asking when no mod listens. API @API:client_sound_particle@.
+#[inline(never)]
+pub fn native_client_particle(particle: &str, at: [f64; 3], velocity: [f64; 3], cancel: &mut bool) {
+    generated::dispatch_client_particle(
+        RENDERERS.get().map_or(&[], |renderers| renderers),
+        particle,
+        at,
+        velocity,
+        cancel,
+    );
+}
+
+/// Whether any mod listens on the render hooks, so asking [`native_client_sound`] or
+/// [`native_client_particle`] can be skipped. Most players run none.
+pub fn render_hooked() -> bool {
+    RENDERERS
+        .get()
+        .is_some_and(|renderers| !renderers.is_empty())
+}
+
 /// Asked as a frame is built and drawn: set what your mod needs.
 #[inline(never)]
 pub fn native_render_needs(needs: &mut RenderNeeds) {
@@ -212,9 +270,109 @@ pub fn world_warp() -> WorldWarp {
     warp
 }
 
+/// A mod for tests of the sound and particle hooks, installed once for the test process (the list
+/// is process-wide). It touches only the fixture sounds and one velocity, so no other test changes.
+#[cfg(test)]
+pub(crate) mod fixture {
+    use super::*;
+
+    /// The velocity of the particles the fixture mod cancels.
+    pub(crate) const HIDDEN_VELOCITY: [f64; 3] = [123.0, 456.0, 789.0];
+
+    struct Fixture;
+    impl RenderHooks for Fixture {
+        fn client_sound(&self, event: &mut ClientSoundEvent<'_>) {
+            match event.sound {
+                "minecraft:fixture.muted" => event.cancel = true,
+                "minecraft:fixture.quiet" => {
+                    event.volume *= 0.5;
+                    event.pitch = 2.0;
+                }
+                _ => {}
+            }
+        }
+        fn client_particle(&self, event: &mut ClientParticleEvent<'_>) {
+            event.cancel |= event.velocity == HIDDEN_VELOCITY;
+        }
+    }
+
+    pub(crate) fn install_fixture() {
+        static ONCE: std::sync::Once = std::sync::Once::new();
+        ONCE.call_once(|| {
+            assert!(install(Box::new([&Fixture])).is_ok());
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    struct Hush;
+    impl RenderHooks for Hush {
+        fn client_sound(&self, event: &mut ClientSoundEvent<'_>) {
+            event.volume *= 0.5;
+            event.cancel = event.source == "block" && event.at[1] < 0.0;
+        }
+        fn client_particle(&self, event: &mut ClientParticleEvent<'_>) {
+            event.cancel = event.particle == "minecraft:flame";
+        }
+    }
+    struct Boost;
+    impl RenderHooks for Boost {
+        fn client_sound(&self, event: &mut ClientSoundEvent<'_>) {
+            event.volume += 1.0;
+            event.pitch = event.pitch.max(1.5);
+        }
+    }
+
+    #[test]
+    fn sounds_change_in_mod_order_and_a_cancel_stays() {
+        let (mut volume, mut pitch, mut cancel) = (1.0, 1.0, false);
+        let at = [0.0, 64.0, 0.0];
+        let mods: [&dyn RenderHooks; 2] = [&Hush, &Boost];
+        generated::dispatch_client_sound(
+            &mods,
+            "minecraft:block.fire.ambient",
+            "block",
+            at,
+            &mut volume,
+            &mut pitch,
+            &mut cancel,
+        );
+        assert_eq!((volume, pitch, cancel), (1.5, 1.5, false));
+        generated::dispatch_client_sound(
+            &mods,
+            "minecraft:block.fire.ambient",
+            "block",
+            [0.0, -1.0, 0.0],
+            &mut volume,
+            &mut pitch,
+            &mut cancel,
+        );
+        assert!(cancel);
+    }
+
+    #[test]
+    fn particles_are_cancelled_by_id() {
+        let mods: [&dyn RenderHooks; 2] = [&Boost, &Hush];
+        let mut cancel = false;
+        generated::dispatch_client_particle(
+            &mods,
+            "minecraft:smoke",
+            [0.0; 3],
+            [0.0; 3],
+            &mut cancel,
+        );
+        assert!(!cancel);
+        generated::dispatch_client_particle(
+            &mods,
+            "minecraft:flame",
+            [0.0; 3],
+            [0.0; 3],
+            &mut cancel,
+        );
+        assert!(cancel);
+    }
 
     struct Depth;
     impl RenderHooks for Depth {

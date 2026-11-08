@@ -83,7 +83,7 @@ The hue at a point is `fract((x * d[0] + y * d[1]) / size - speed * seconds)`, a
 alpha unchanged. Each glyph quad is coloured at its four corners, so the sweep is smooth across a glyph. A shadow
 takes the same hue at its own (quarter) brightness. Legacy `§` colour codes change the brightness and keep the chroma;
 `§r` returns to the span's style, chroma included. Positions are the batch's when the text is drawn: text a mod moves afterwards (`scale_since`) carries
-its colours with it, and world text sweeps in the text's own plane. `HudBatch::chroma_seconds` sets the clock for a
+its colours with it, and world text sweeps in the text's own plane. `HudBatch::chroma_seconds` sets the clock (unset, it is read once at the batch's first chroma glyph) for a
 reproducible frame. Cost: one pass over the vertices of a chroma glyph; text without it is untouched.
 
 ## Item frame rendering

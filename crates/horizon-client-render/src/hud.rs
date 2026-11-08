@@ -1707,7 +1707,8 @@ pub struct HudBatch {
     /// Player object profiles encountered while painting text this frame.
     pub inline_profiles: Vec<serde_json::Value>,
     /// The animation clock of chroma text ([`crate::text::Chroma`]), in seconds; the
-    /// wall clock since the first chroma glyph when unset. Set it for a reproducible frame.
+    /// wall clock, read at the first chroma glyph of the batch and kept for the rest of it, when
+    /// unset. Set it for a reproducible frame.
     pub chroma_seconds: Option<f64>,
 }
 /// How a run of HUD vertices blends and tests depth.
@@ -1782,7 +1783,7 @@ impl HudBatch {
     /// it had, so the sweep runs smoothly across a glyph, its shadow and its lines. Text drawn
     /// in the world sweeps in the text's own plane.
     pub fn chroma_since(&mut self, start: usize, chroma: &crate::text::Chroma) {
-        let seconds = self.chroma_seconds.unwrap_or_else(chroma_clock);
+        let seconds = *self.chroma_seconds.get_or_insert_with(chroma_clock);
         for v in &mut self.vertices[start..] {
             let [r, g, b, a] = v.color.to_le_bytes();
             let brightness = f32::from(r.max(g).max(b)) / 255.0;

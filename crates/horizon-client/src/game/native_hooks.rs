@@ -2939,6 +2939,17 @@ impl Game<'_> {
     ) {
         mod_api::dispatch_compute_fov_modifier(self, mod_api::mods(), player, base, modifier);
     }
+    /// What a vanilla key mapping (`key.attack`, `key.use`, `key.forward`, `key.left`,
+    /// `key.back`, `key.right`, `key.jump`, `key.sneak`, `key.sprint`) is this client tick, while
+    /// playing with no screen open: set `down` to hold it or release it whatever its keys do
+    /// (`KeyMapping.isDown`); the first mod to set it wins, and `None` leaves the player's keys
+    /// in charge. The game reads the movement, sneak and sprint mappings through the answer. An
+    /// attack or use pressed for a mod clicks and then holds the mouse button until the answer
+    /// ends; a `Some(false)` does not mask the player's own button. Client only. API
+    /// @API:key_mapping_state@.
+    pub(super) fn native_key_mapping_state(&self, mapping: &str, down: &mut Option<bool>) {
+        mod_api::dispatch_key_mapping_state(self, mod_api::mods(), mapping, down);
+    }
     /// Local player movement input, after reading it and before applying it.
     pub(super) fn native_movement_input(
         &self,

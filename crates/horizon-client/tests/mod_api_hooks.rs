@@ -734,3 +734,51 @@ fn wind_burst_filter_preserves_order_and_context() {
     );
     assert_eq!(blocks, vec![[3, 70, -2], [2, 70, -2]]);
 }
+
+#[test]
+fn key_mapping_state_is_set_by_the_first_mod_that_answers() {
+    use horizon_client::mod_api::{KeyMappingStateEvent, dispatch_key_mapping_state};
+    struct TestHost;
+    impl Host for TestHost {}
+    struct Remap;
+    impl Hooks for Remap {
+        fn key_mapping_state(
+            &self,
+            _host: &dyn Host,
+            event: &mut KeyMappingStateEvent<'_>,
+        ) -> Option<bool> {
+            (event.mapping == "key.forward").then_some(true)
+        }
+    }
+    struct Block;
+    impl Hooks for Block {
+        fn key_mapping_state(
+            &self,
+            _host: &dyn Host,
+            _event: &mut KeyMappingStateEvent<'_>,
+        ) -> Option<bool> {
+            Some(false)
+        }
+    }
+    let mods: Vec<Box<dyn Hooks>> = vec![Box::new(Remap), Box::new(Block)];
+    let ask = |mapping: &str| {
+        let mut down = None;
+        dispatch_key_mapping_state(&TestHost, &mods, mapping, &mut down);
+        down
+    };
+    assert_eq!(ask("key.forward"), Some(true), "the first answer wins");
+    assert_eq!(
+        ask("key.jump"),
+        Some(false),
+        "a later mod answers what the first leaves"
+    );
+    assert_eq!(
+        {
+            let mut down = Some(true);
+            dispatch_key_mapping_state(&TestHost, &mods, "key.back", &mut down);
+            down
+        },
+        Some(true),
+        "an answer already set stays"
+    );
+}

@@ -1,0 +1,17 @@
+{
+  "hooks": [
+    {
+      "name": "key_mapping_state",
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_key_mapping_state",
+      "neoforge": "none (NeoForge has no such event; mods mix into KeyMapping.isDown and consumeClick)",
+      "side": "client",
+      "cancellable": false,
+      "mod_api": {
+        "contract": "replace",
+        "out": "down"
+      }
+    }
+  ],
+  "rust_summary": "a client mod overriding the vanilla key mappings each tick (`native_key_mapping_state`).",
+  "doc_summary": "`native_key_mapping_state(mapping, down)` runs each client tick, while playing with no screen open, once for each of `key.attack`, `key.use`, `key.forward`, `key.left`, `key.back`, `key.right`, `key.jump`, `key.sneak` and `key.sprint`. Set `down` (the first mod to return `Some` wins) to hold or release the mapping whatever its keys do, as a `KeyMapping.isDown` mixin would; `None` leaves the player's keys in charge. The game reads the movement, sneak and sprint mappings through the answer (the physical keys are untouched, and `the mapping helper` still reports them). Attack and use are mouse buttons: `Some(true)` presses the button for the mod (a click, then held) and `None` or `Some(false)` lets go; it does not mask the player's own button, which `native_interaction_key` cancels instead. With no mods installed nothing is asked. Bundles need \"hooks\": @API:key_mapping_state@."
+}

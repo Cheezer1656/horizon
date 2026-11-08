@@ -30,12 +30,35 @@ impl Source {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct HeldKeys {
     held: HashMap<KeyCode, u8>,
+    /// What a client mod says a mapping is, whatever its keys are doing: asked first by
+    /// [`HeldKeys::held`], gone when the mod stops answering. Physical state is kept untouched.
+    overrides: HashMap<Action, bool>,
 }
 
 impl HeldKeys {
     /// Whether anything holds this mapping: every device, whatever the mapping is bound to.
+    /// A mod's override (`native_key_mapping_state`) answers first.
     pub fn held(&self, action: Action) -> bool {
+        if let Some(down) = self.overrides.get(&action) {
+            return *down;
+        }
         action.key().is_some_and(|key| self.raw(&key))
+    }
+    /// Make `action` held or not whatever its keys do (`Some`), or give it back to them (`None`).
+    /// Only [`HeldKeys::held`] sees it; [`HeldKeys::raw`] and the physical keys stay as they are.
+    pub fn set_override(&mut self, action: Action, down: Option<bool>) {
+        match down {
+            Some(down) => {
+                self.overrides.insert(action, down);
+            }
+            None => {
+                self.overrides.remove(&action);
+            }
+        }
+    }
+    /// The override on `action`, if a mod set one.
+    pub fn overridden(&self, action: Action) -> Option<bool> {
+        self.overrides.get(&action).copied()
     }
     /// Whether a key that is no mapping's default is held (Right Shift, the arrows, Alt, the system
     /// key), or the key a caller already holds as a key: most code wants [`HeldKeys::held`].
@@ -164,6 +187,21 @@ mod tests {
         assert!(keys.release_source(Source::Pad).is_empty());
         assert_eq!(keys.release_source(Source::Agent), vec![KeyCode::KeyW]);
         assert!(!keys.held(Action::Forward));
+    }
+
+    #[test]
+    fn an_override_masks_a_mapping_without_touching_its_keys() {
+        let mut keys = HeldKeys::default();
+        keys.press(KeyCode::KeyW, Source::Keyboard);
+        keys.set_override(Action::Forward, Some(false));
+        keys.set_override(Action::Jump, Some(true));
+        assert!(!keys.held(Action::Forward) && keys.raw(&KeyCode::KeyW));
+        assert!(keys.held(Action::Jump) && !keys.raw(&KeyCode::Space));
+        assert_eq!(keys.overridden(Action::Jump), Some(true));
+        keys.set_override(Action::Forward, None);
+        keys.set_override(Action::Jump, None);
+        assert!(keys.held(Action::Forward) && !keys.held(Action::Jump));
+        assert_eq!(keys.overridden(Action::Jump), None);
     }
 
     #[test]

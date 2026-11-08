@@ -284,6 +284,7 @@ mod native_inventories;
 mod native_item_container;
 mod native_item_energy;
 mod native_item_fluids;
+mod native_key_mapping;
 mod native_level_effects;
 mod native_level_refs;
 mod native_level_world;
@@ -2520,6 +2521,8 @@ struct Game<'a> {
     /// The game mode; `creative` mirrors `mode == Creative`.
     mode: horizon_client::command::args::GameMode,
     keys: horizon_client::held::HeldKeys,
+    /// Whether a mod holds the attack and use buttons (`native_key_mapping_state`).
+    mod_buttons: [bool; 2],
     // Physical input is separate from remapped and toggled movement keys.
     physical_keys: HashSet<KeyCode>,
     physical_buttons: HashSet<MouseButton>,
@@ -7611,6 +7614,7 @@ impl Game<'_> {
                 self.screen = Screen::Inventory;
             }
         }
+        self.tick_key_mapping_overrides()?;
         if self.remote.is_some() {
             return self.tick_remote();
         }
@@ -16806,6 +16810,7 @@ impl<'a> Game<'a> {
                 horizon_client::command::args::GameMode::Survival
             },
             keys: Default::default(),
+            mod_buttons: [false; 2],
             physical_keys: HashSet::new(),
             physical_buttons: HashSet::new(),
             drag_button: None,

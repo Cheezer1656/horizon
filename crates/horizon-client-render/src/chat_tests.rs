@@ -1104,7 +1104,10 @@ fn an_edit_keeps_the_scrolled_view_and_old_lines_are_gone() {
     let scroll = chat.scroll;
     let grown = Text::literal("new ".repeat(200));
     assert!(chat.edit_handled_with(&font, newer, grown, true));
-    assert!(chat.scroll > scroll, "lines added under the view push it up");
+    assert!(
+        chat.scroll > scroll,
+        "lines added under the view push it up"
+    );
     assert!(chat.edit_handled_with(&font, newer, Text::literal("new"), true));
     assert_eq!(chat.scroll, scroll);
     for i in 0..100 {

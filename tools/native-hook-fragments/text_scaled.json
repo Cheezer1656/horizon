@@ -3,7 +3,7 @@
   "helpers": [
     {
       "name": "text_scaled",
-      "target": "horizon_client::game::native_hooks::Game<'_>::native_text_scaled"
+      "target": "horizon_client::game::native_client_services::Game<'_>::native_text_scaled"
     }
   ],
   "rust_summary": "scaled GUI text (`native_text_scaled`), as a pose `scale` draws it.",

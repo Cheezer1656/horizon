@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class NativeTextScaledTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("rustc"), "requires Rust")
     def test_text_is_scaled_about_its_origin_and_alpha_is_kept(self):
-        source = (ROOT / "crates/horizon-client/src/game/native_hooks.rs").read_text(encoding="utf-8")
+        source = (ROOT / "crates/horizon-client/src/game/native_client_services.rs").read_text(encoding="utf-8")
         actual = method(source.replace("pub(super) fn", "fn"), "native_text_scaled")
         fixture = r"""
 struct Text;

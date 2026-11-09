@@ -11470,32 +11470,6 @@ impl Game<'_> {
         let color = rgba(r, g, b, 0xFF);
         batch.text_styled(&self.gui.atlas, &Text::literal(text), x, y, color, shadow);
     }
-    /// A line of text with its top left at `at` in GUI pixels, `scale` times
-    /// its size (a pose `translate(at)`, `scale(scale)`: the shadow's offset
-    /// and the glyphs grow with it, and `at` stays where it is), `argb`
-    /// (an alpha under 4 reads as opaque, as `Font.adjustColor`, so 0xRRGGBB
-    /// works). Returns the scaled width in GUI pixels. Draws nothing and
-    /// returns 0 for a `scale` that is not finite and positive. API @API:text_scaled@.
-    pub(super) fn native_text_scaled(
-        &self,
-        batch: &mut HudBatch,
-        text: &str,
-        at: [f32; 2],
-        scale: f32,
-        argb: u32,
-        shadow: bool,
-    ) -> f32 {
-        if scale.is_nan() || scale.is_infinite() || scale <= 0.0 {
-            return 0.0;
-        }
-        let [x, y] = at;
-        let [a, r, g, b] = argb.to_be_bytes();
-        let color = rgba(r, g, b, if a < 4 { 0xFF } else { a });
-        let start = batch.vertices.len();
-        let width = batch.text_styled(&self.gui.atlas, &Text::literal(text), x, y, color, shadow);
-        batch.scale_since(start, x, y, scale, scale);
-        width * scale
-    }
     /// The player, in a world.
     pub(super) fn native_player(&self) -> Option<NativePlayer> {
         let p = self.player.as_ref()?;

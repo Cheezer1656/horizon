@@ -4281,7 +4281,6 @@ mod tests {
         let render = Arc::new(assets.reload(&root)?);
         let facts = BlockFacts::load(&root, assets.registry)?;
         let context = WorkerContext {
-            block_models: Arc::default(),
             light: Arc::new(LightTables::load(&root, assets.registry, &facts)?),
             tables: Arc::new(MeshTables::new(
                 &assets,
@@ -4359,7 +4358,6 @@ mod tests {
             crate::models::load_visibility(&root, assets.registry)?,
         )?);
         let context = Arc::new(WorkerContext {
-            block_models: Arc::default(),
             light: Arc::new(LightTables::load(&root, assets.registry, &facts)?),
             tables,
             assets: assets.clone(),
@@ -5677,7 +5675,6 @@ mod tests {
             crate::models::load_visibility(&root, assets.registry)?,
         )?);
         let context = Arc::new(WorkerContext {
-            block_models: Arc::default(),
             light: Arc::new(LightTables::load(&root, assets.registry, &facts)?),
             tables,
             assets,

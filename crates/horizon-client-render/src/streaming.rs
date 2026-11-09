@@ -1038,7 +1038,6 @@ impl<G: ChunkGenerator> Jobs<G> {
                     cutout_leaves: settings.cutout_leaves,
                     opaque_ice: settings.opaque_ice,
                     translucent_layers: &settings.translucent_layers,
-                    block_models: &context.block_models,
                     leaf_culling: settings.leaf_culling,
                     assets: &context.assets,
                     render: &context.render,
@@ -1057,9 +1056,6 @@ impl<G: ChunkGenerator> Jobs<G> {
     }
 }
 pub struct WorkerContext {
-    /// What each block state is drawn as, by state id: native mods' client block models
-    /// (`Mesher::block_models`). Empty draws every state as itself.
-    pub block_models: Arc<[u32]>,
     pub assets: Arc<crate::assets::Assets>,
     pub render: Arc<crate::assets::RenderAssets>,
     pub tables: Arc<MeshTables>,

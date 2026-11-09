@@ -163,24 +163,10 @@ impl PackResources {
             return old.clone();
         }
         Arc::new(WorkerContext {
-            block_models: old.block_models.clone(),
             assets: old.assets.clone(),
             render: old.render.clone(),
             tables: old.tables.clone(),
             biomes,
-            light: old.light.clone(),
-        })
-    }
-    /// The workers' context with `block_models` (`WorkerContext::block_models`) in place of this
-    /// pack's.
-    pub(super) fn context_with_block_models(&self, block_models: Arc<[u32]>) -> Arc<WorkerContext> {
-        let old = &self.context;
-        Arc::new(WorkerContext {
-            block_models,
-            assets: old.assets.clone(),
-            render: old.render.clone(),
-            tables: old.tables.clone(),
-            biomes: old.biomes.clone(),
             light: old.light.clone(),
         })
     }
@@ -248,7 +234,6 @@ impl PackResources {
                     .collect(),
             ),
             context: Arc::new(WorkerContext {
-                block_models: Arc::default(),
                 assets: assets.clone(),
                 render: render.clone(),
                 tables,

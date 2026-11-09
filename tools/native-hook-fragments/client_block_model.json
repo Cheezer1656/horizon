@@ -2,7 +2,7 @@
   "hooks": [
     {
       "name": "client_block_model",
-      "target": "horizon_client::game::native_hooks::Game<'_>::native_client_block_model",
+      "target": "horizon_client::game::native_block_sprites::Game<'_>::native_client_block_model",
       "neoforge": "BlockStateModelSet.get (model override)",
       "side": "client",
       "mod_api": {
@@ -13,12 +13,12 @@
   "helpers": [
     {
       "name": "refresh_block_models",
-      "target": "horizon_client::game::native_block_models::Game<'_>::native_refresh_block_models"
+      "target": "horizon_client::game::native_block_sprites::Game<'_>::native_refresh_block_models"
     }
   ],
   "rust_summary": "the block state a client draws a state as in the terrain (`native_client_block_model`, rebuilt by `native_refresh_block_models`).",
   "doc_summary": "client block appearance: `native_client_block_model(state, model)` sets the block state the loaded terrain draws `state` as (its model, culling and light), asked for every state when a mod calls `native_refresh_block_models()`, which rebuilds the loaded sections with the answers. Drawing only: collision, the outline and the world's blocks stay. Bundles need \"hooks\": @API:client_block_model@.",
   "comments": [
-    "crates/horizon-client/src/game/native_block_models.rs"
+    "crates/horizon-client/src/game/native_block_sprites.rs"
   ]
 }

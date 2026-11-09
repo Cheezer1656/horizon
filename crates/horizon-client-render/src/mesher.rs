@@ -760,6 +760,9 @@ pub struct MeshTables {
     /// Resource packs' Polytone block and fluid colormaps (#11486), and the water's.
     colormaps: Vec<Arc<crate::environment::Colormap>>,
     water_colormap: Option<u16>,
+    /// What each block state is drawn as, by state id: a native mod's client block models
+    /// ([`Self::set_block_models`]). Empty draws every state as itself.
+    block_models: std::sync::RwLock<Arc<[u32]>>,
 }
 /// Vanilla's four biome colour functions (`BiomeColors`) with what the packs replace them by:
 /// `biome_colors` (a colormap or a flat colour), else the colormap a block modifier gives
@@ -984,7 +987,28 @@ impl MeshTables {
             animated_layers,
             colormaps: Vec::new(),
             water_colormap: None,
+            block_models: Default::default(),
         })
+    }
+    /// What each block state is drawn as ([`Self::set_block_models`]); empty when no mod changes
+    /// any.
+    pub fn block_models(&self) -> Arc<[u32]> {
+        self.block_models
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+    /// Draws block state `i` as `models[i]` in the sections meshed from now on (a native mod's
+    /// client block models): faces, culling, occlusion and light follow the replacement, and the
+    /// world's blocks stay. Air stays air, and a state past the table's end draws as itself.
+    /// False when the table was already `models`.
+    pub fn set_block_models(&self, models: Arc<[u32]>) -> bool {
+        let mut current = self.block_models.write().unwrap_or_else(|e| e.into_inner());
+        if **current == *models {
+            return false;
+        }
+        *current = models;
+        true
     }
     /// These tables with the colormaps of the Polytone block and fluid modifiers of the packs
     /// merged at `pack_root` (wiki "Colormaps"): a tinted block they target takes its colour
@@ -1873,9 +1897,6 @@ pub struct Mesher<'a> {
     pub opaque_ice: bool,
     /// Sprite layers a shader pack moves into the translucent pass, by layer.
     pub translucent_layers: &'a [bool],
-    /// What each block state is drawn as, by state id (a native mod's client block models); a
-    /// state past its end, and air, draw as themselves, and none at all draws every state so.
-    pub block_models: &'a [u32],
     /// What the worker does with leaf faces inside a canopy.
     pub leaf_culling: LeafCullingMode,
 }
@@ -1906,7 +1927,7 @@ impl Mesher<'_> {
         }
         let own = scratch.own.get_or_insert_with(|| Box::new([0; 4096]));
         scratch.padded.fill(region, sy, own);
-        remodel(&mut scratch.padded.blocks, self.block_models);
+        remodel(&mut scratch.padded.blocks, &self.tables.block_models());
         let pad = &scratch.padded;
         solid_rows(pad, &self.tables.solid, &mut scratch.solid_rows);
         let opaque = &scratch.solid_rows;

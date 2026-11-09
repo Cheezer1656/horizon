@@ -142,7 +142,6 @@ fn scene(
         cutout_leaves,
         opaque_ice: false,
         translucent_layers: &[],
-        block_models: &[],
         leaf_culling: LeafCullingMode::Off,
     };
     let section_y = int(&row["section_y"])?;

@@ -3058,20 +3058,6 @@ impl Game<'_> {
     pub(super) fn native_biome_colors(&self, biome: &str, colors: &mut BiomeColors) {
         mod_api::dispatch_biome_colors(self, mod_api::mods(), biome, colors);
     }
-    /// The block state this client draws `state` as in the loaded terrain
-    /// (Fabric's and NeoForge's block model overrides; the client's
-    /// `BlockStateModelSet.get`). `model` comes in as `state` itself; set it
-    /// to another state to draw that state's model, culling and light in its
-    /// place: a recoloured ore, a hidden block (air), a plain stand-in. Drawing
-    /// only: collision, outline, what the server and other players see and
-    /// the world's blocks stay. Asked for every block state (air excepted)
-    /// when a mod calls `native_refresh_block_models`, not per block or per
-    /// frame, so the answer depends on the state alone and on what the mod
-    /// keeps (an area, a toggle); an id past the registry is ignored. API
-    /// @API:client_block_model@.
-    pub(super) fn native_client_block_model(&self, state: BlockStateId, model: &mut BlockStateId) {
-        mod_api::dispatch_client_block_model(self, mod_api::mods(), state, model);
-    }
     /// Choose this client's music, once a client tick: `music` and `volume`
     /// hold what vanilla chose (`Minecraft.getSituationalMusic` and
     /// `getMusicVolume`: the biome's track, the creative or underwater one, a

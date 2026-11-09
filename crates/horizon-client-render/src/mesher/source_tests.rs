@@ -164,6 +164,7 @@ fn fixture() -> (Scratch, Assets, RenderAssets, MeshTables, Biomes) {
         animated_layers: vec![false],
         colormaps: Vec::new(),
         water_colormap: None,
+        block_models: Default::default(),
     };
     let maps = path.join("assets/minecraft/textures/colormap");
     std::fs::create_dir_all(&maps).unwrap();
@@ -206,7 +207,6 @@ fn terrain_source_cpu_multipart_and_waterlogged_faces_keep_their_owner() {
         opaque_ice: false,
         translucent_layers: &[],
         leaf_culling: LeafCullingMode::Off,
-        block_models: &[],
     };
     let mut mesh = mesher.mesh(&region, 0);
     assert_eq!(mesh.solid.len(), 16, "two parts per source state");

@@ -328,7 +328,6 @@ mod tests {
             crate::models::load_visibility(&root, assets.registry)?,
         )?);
         let context = WorkerContext {
-            block_models: Arc::default(),
             light: Arc::new(LightTables::load(&root, assets.registry, &facts)?),
             tables,
             assets: assets.clone(),

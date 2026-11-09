@@ -85,7 +85,6 @@ fn context(root: &Path) -> Arc<WorkerContext> {
     let facts = BlockFacts::load(root, assets.registry).unwrap();
     let visibility = models::load_visibility(root, assets.registry).unwrap();
     Arc::new(WorkerContext {
-        block_models: Arc::default(),
         tables: Arc::new(MeshTables::new(&assets, &render, &facts, visibility).unwrap()),
         light: Arc::new(LightTables::load(root, assets.registry, &facts).unwrap()),
         biomes: Arc::new(Biomes::load(root).unwrap()),

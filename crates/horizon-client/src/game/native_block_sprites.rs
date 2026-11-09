@@ -5,8 +5,10 @@ use super::Game;
 use horizon_client::block_sprites::{BlockSprites, Lookup, SpriteRef};
 use horizon_client::block_states::BlockStates;
 use horizon_client::client_resources::ClientResources;
+use horizon_client::mod_api;
 use horizon_core::geometry::Direction;
 use horizon_world::registry::BlockStateId;
+use std::sync::Arc;
 
 impl Game<'_> {
     /// For a client mod: what each block (`minecraft:grass_block`, `oak_log[axis=x]`; properties left out take the
@@ -83,5 +85,60 @@ impl Game<'_> {
         self.renderer
             .as_ref()
             .map_or(u32::MAX, |r| r.sprite_split())
+    }
+}
+
+// Block models a client mod changes (`native_client_block_model`): what the loaded terrain draws a
+// block state as, for a recoloured ore, a hidden block or a stand-in, changed while the game runs.
+
+// Native mods call it; nothing in Horizon does.
+#[allow(dead_code)]
+impl Game<'_> {
+    /// Asks `native_client_block_model` again for every block state and, when the answers differ
+    /// from those in use, rebuilds every loaded section with them (`LevelRenderer.allChanged`, as
+    /// changing Biome Blend does). Call it when your answers change (a toggle, an area entered)
+    /// and once when the player joins, not every frame: a rebuild takes the workers a few seconds.
+    /// The answers survive resource reloads and world changes. API @API:client_block_model@.
+    pub(super) fn native_refresh_block_models(&mut self) {
+        let count = self.pack.assets.registry.len();
+        let mut models: Vec<u32> = (0..count as u32).collect();
+        let mut changed = false;
+        // Air stays air: the mesher skips it before any lookup.
+        for id in 1..count as u32 {
+            let mut model = BlockStateId(id);
+            self.native_client_block_model(BlockStateId(id), &mut model);
+            if (model.0 as usize) < count && model.0 != id {
+                models[id as usize] = model.0;
+                changed = true;
+            }
+        }
+        // No mod changes anything: the empty table, which the mesher skips whole.
+        let models: Arc<[u32]> = if changed {
+            models.into()
+        } else {
+            Arc::default()
+        };
+        if self.pack.context.tables.set_block_models(models) {
+            let context = self.worker_context();
+            self.streaming.reload_resources(&mut self.world, context);
+        }
+    }
+}
+
+/// The client block model hook (API @API:client_block_model@).
+impl Game<'_> {
+    /// The block state this client draws `state` as in the loaded terrain
+    /// (Fabric's and NeoForge's block model overrides; the client's
+    /// `BlockStateModelSet.get`). `model` comes in as `state` itself; set it
+    /// to another state to draw that state's model, culling and light in its
+    /// place: a recoloured ore, a hidden block (air), a plain stand-in. Drawing
+    /// only: collision, outline, what the server and other players see and
+    /// the world's blocks stay. Asked for every block state (air excepted)
+    /// when a mod calls `native_refresh_block_models`, not per block or per
+    /// frame, so the answer depends on the state alone and on what the mod
+    /// keeps (an area, a toggle); an id past the registry is ignored. API
+    /// @API:client_block_model@.
+    pub(super) fn native_client_block_model(&self, state: BlockStateId, model: &mut BlockStateId) {
+        mod_api::dispatch_client_block_model(self, mod_api::mods(), state, model);
     }
 }

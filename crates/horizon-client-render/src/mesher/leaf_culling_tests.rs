@@ -85,7 +85,6 @@ fn mesh(
         cutout_leaves: true,
         opaque_ice: false,
         translucent_layers: &[],
-        block_models: &[],
         leaf_culling: mode,
     };
     mesher.mesh(&region, sy)

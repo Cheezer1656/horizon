@@ -5,6 +5,7 @@
     {"name": "client_chat_edit", "target": "horizon_client::game::native_client_services::Game<'_>::native_client_chat_edit", "mod_api": {}},
     {"name": "client_chat_remove", "target": "horizon_client::game::native_client_services::Game<'_>::native_client_chat_remove", "mod_api": {}}
   ],
+  "comments": ["crates/horizon-client/src/game/native_client_services.rs"],
   "rust_summary": "a styled line in the client's own chat that a mod can edit or remove by its handle (`native_client_chat_add`, `native_client_chat_edit`, `native_client_chat_remove`), and `Style`, `Span` and `ClickEvent` beside `Text` in `mod_api`.",
   "doc_summary": "`Host::client_chat_add(line)` adds a styled `Text` (colours, click and hover events) to the client's chat and returns a handle, `client_chat_edit(handle, text)` replaces that line in place and `client_chat_remove(handle)` takes it out; both are false for a handle the chat no longer holds. `mod_api` exports `Style`, `Span` and `ClickEvent` beside `Text`. Bundles need \"hooks\": @API:client_chat_edit@."
 }

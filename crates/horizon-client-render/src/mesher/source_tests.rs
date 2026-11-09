@@ -206,6 +206,7 @@ fn terrain_source_cpu_multipart_and_waterlogged_faces_keep_their_owner() {
         opaque_ice: false,
         translucent_layers: &[],
         leaf_culling: LeafCullingMode::Off,
+        block_models: &[],
     };
     let mut mesh = mesher.mesh(&region, 0);
     assert_eq!(mesh.solid.len(), 16, "two parts per source state");

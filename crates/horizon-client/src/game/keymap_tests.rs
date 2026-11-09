@@ -1,4 +1,5 @@
-use super::{follow_keymap, follow_named_keymap};
+use super::follow_keymap;
+use super::key_codes::follow_named_keymap;
 use horizon_client::{
     debug_keys::{DebugAction, DebugHost, DebugKeys, KeyAction, OpenScreen},
     keybinds::{self, KeyBinds},

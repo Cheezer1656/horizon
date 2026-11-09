@@ -554,8 +554,8 @@ use horizon_world::{
     registry::BlockStateId,
 };
 use key_codes::{
-    container_key_clones, drop_held_behind_dialog, follow_keymap, follow_named_keymap,
-    gameplay_has_keyboard, glfw_button, glfw_modifiers, keyboard_button,
+    container_key_clones, drop_held_behind_dialog, follow_keymap, gameplay_has_keyboard,
+    glfw_button, glfw_modifiers, keyboard_button,
 };
 use launch_options::Options;
 use loading_screen::{

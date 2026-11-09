@@ -2934,37 +2934,6 @@ impl Game<'_> {
     ) {
         mod_api::dispatch_entity_outline(self, mod_api::mods(), entity_id, kind, outline);
     }
-    /// Before a client entity is drawn: whether it draws at all, how opaque, and whether
-    /// its armour shows (NeoForge's `RenderLivingEvent.Pre` and `EntityRenderer.shouldRender`).
-    /// `alpha` comes in as 1.0 and `hide_armor` as false; set `alpha` below 1.0 to draw the
-    /// entity translucent (at or below 0.1 nothing of it shows, as the entity shader's alpha
-    /// cutoff), `hide_armor` to leave out its worn armour and head item (`HumanoidArmorLayer`,
-    /// `CustomHeadLayer`), or `cancel` to skip it altogether: its model, layers, held items and
-    /// glowing outline. It changes only what this client draws; the entity stays in the world,
-    /// and its name tag, fire and shadow are decided apart (`native_render_name_tag`).
-    /// Asked each frame for every entity that is about to draw, after the distance and view
-    /// checks: mobs, other players and yourself in third person, armor stands, dropped items,
-    /// projectiles, and block, item and text displays. `kind` is the entity type
-    /// (`minecraft:armor_stand`). `alpha` and `hide_armor` apply where the entity has something
-    /// to fade or armour to hide; a text display ignores `alpha`. API @API:client_entity_render@.
-    pub(super) fn native_client_entity_render(
-        &self,
-        entity_id: u32,
-        kind: &str,
-        alpha: &mut f32,
-        hide_armor: &mut bool,
-        cancel: &mut bool,
-    ) {
-        mod_api::dispatch_client_entity_render(
-            self,
-            mod_api::mods(),
-            entity_id,
-            kind,
-            alpha,
-            hide_armor,
-            cancel,
-        );
-    }
     /// Before one first-person hand and its displayed stack are drawn (RenderHandEvent).
     /// Equip progress is the inverse arm height, including the item's swap animation scale.
     /// Cancel skips that hand's default geometry, including its map and arm geometry.

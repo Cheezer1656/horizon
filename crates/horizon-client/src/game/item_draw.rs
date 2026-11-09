@@ -616,7 +616,7 @@ impl Game<'_> {
                 };
                 look
             } else {
-                super::entity_render::EntityLook::VANILLA
+                super::native_mob_draw::EntityLook::VANILLA
             };
             // `extractItemGroupRenderState`: GROUND, seeded by the entity id.
             let owner = owner_at([q.x, q.y, q.z], 0.0, "minecraft:item");

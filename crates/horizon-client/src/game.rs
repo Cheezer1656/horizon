@@ -143,7 +143,6 @@ mod enderman_hurt_teleport_tests;
 mod enderman_placement_tests;
 mod entity;
 mod entity_culling;
-mod entity_render;
 mod entity_sounds;
 mod event_loop;
 mod events;

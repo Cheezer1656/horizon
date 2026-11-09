@@ -685,6 +685,29 @@ fn catalog_matches_hook_points() {
     let conn_hooks = free_hooks(include_str!("../lan/conn.rs"));
     // The log writer's (`horizon_client_lib::native_client_hooks`).
     let client_hooks = free_hooks(include_str!("../native_client_hooks.rs"));
+    // Hook points kept out of native_hooks.rs, in another module under game/: each is declared in
+    // the file its target names.
+    let mut game_hooks = std::collections::BTreeMap::new();
+    for hook in &hooks {
+        let target = hook["target"].as_str().unwrap();
+        let Some((module, name)) = target
+            .strip_prefix("horizon_client::game::")
+            .and_then(|rest| rest.split_once("::Game<'_>::native_"))
+            .filter(|(module, _)| *module != "native_hooks")
+        else {
+            continue;
+        };
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/game")
+            .join(format!("{}.rs", module.replace("::", "/")));
+        let source = std::fs::read_to_string(&file).unwrap();
+        assert!(
+            source.contains(&format!("fn native_{name}(")),
+            "{} does not declare native_{name} (target {target})",
+            file.display()
+        );
+        game_hooks.insert(name.to_owned(), target.to_owned());
+    }
     let declared: BTreeSet<_> = section
         .lines()
         .chain(level_section.lines())
@@ -709,6 +732,7 @@ fn catalog_matches_hook_points() {
         .chain(mob_hooks.iter().copied())
         .chain(conn_hooks.iter().copied())
         .chain(client_hooks.iter().copied())
+        .chain(game_hooks.keys().map(String::as_str))
         .collect();
     let mut names = BTreeSet::new();
     let mut contracts = BTreeSet::new();
@@ -720,7 +744,9 @@ fn catalog_matches_hook_points() {
             "invalid or duplicate hook: {name} v{version}"
         );
         names.insert(name);
-        let target = if render_hooks.contains(name) {
+        let target = if let Some(target) = game_hooks.get(name) {
+            target.clone()
+        } else if render_hooks.contains(name) {
             format!("horizon_client_render::gfx::native_render::native_{name}")
         } else if item_hooks.contains(name) {
             format!("horizon_world::item_defaults::native_{name}")

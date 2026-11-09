@@ -6069,8 +6069,10 @@ impl Game<'_> {
                 self.screen = Screen::Inventory;
             }
         }
-        self.tick_key_mapping_overrides()?;
         if self.remote.is_some() {
+            // A client hook: a server's `Game` (the server thread, a dedicated server) has
+            // no keys of its own to override, and must not click for a mod.
+            self.tick_key_mapping_overrides()?;
             return self.tick_remote();
         }
         // Only a server ticks its own world from here: its players are guests, swapped in for

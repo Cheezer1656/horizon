@@ -72,17 +72,3 @@ impl Game<'_> {
         Cow::Owned(shown)
     }
 }
-
-impl Game<'_> {
-    /// The stack a server-opened menu draws in slot `slot` (NeoForge has no
-    /// event for this; mods mix into `Container.getItem` for it): `stack` arrives holding what the slot holds
-    /// and may be replaced, or set to `None` to draw the slot empty. `slot` is
-    /// the server's slot number (`AbstractContainerMenu.slots`, the order of
-    /// `host.menu_stacks()`). Only the picture and the hover tooltip change;
-    /// clicks, quick moves and `menu_stacks` still see the real stack. Asked
-    /// each frame for each slot drawn, only when a mod is installed.
-    /// Client-side. API @API:menu_slot_display@.
-    pub(super) fn native_menu_slot_display(&self, slot: usize, stack: &mut Option<ItemStack>) {
-        mod_api::dispatch_menu_slot_display(self, mod_api::mods(), slot, stack);
-    }
-}

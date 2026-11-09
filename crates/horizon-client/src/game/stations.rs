@@ -2103,8 +2103,7 @@ impl Game<'_> {
         if let Some(slot) = self.slot_at(batch, self.cursor.0, self.cursor.1)
             && tooltip.is_none()
             && tooltip_stack.is_none()
-            && let slot_stack = self.slot_mut(slot).clone()
-            && let Some(stack) = self.menu_slot_shown(slot, &slot_stack).into_owned()
+            && let Some(stack) = self.slot_shown(slot)
             && self.tooltip_with_carried(&stack)
         {
             tooltip_stack = Some(stack);
@@ -2970,9 +2969,7 @@ impl Game<'_> {
             self.draw_stack_tooltip(batch, &ghost, self.cursor.0, self.cursor.1);
             return;
         }
-        let stack = self.slot_view(slot);
-        // A mod's display-only stack, as drawn in the slot.
-        let stack = self.menu_slot_shown(slot, &stack).into_owned();
+        let stack = self.slot_view_shown(slot);
         if self.carried.is_some() && !stack.as_ref().is_some_and(|s| self.tooltip_with_carried(s)) {
             return;
         }

@@ -2,7 +2,7 @@
   "hooks": [
     {
       "name": "menu_slot_display",
-      "target": "horizon_client::game::native_hooks::Game<'_>::native_menu_slot_display",
+      "target": "horizon_client::game::native_menu_stacks::Game<'_>::native_menu_slot_display",
       "side": "client",
       "cancellable": false,
       "mod_api": {

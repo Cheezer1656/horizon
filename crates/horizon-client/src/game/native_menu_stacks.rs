@@ -3,7 +3,7 @@
 //! @API:client_entity_refs@): what the window shows in each slot, as the
 //! server last synced it, where `NativeScreenView` only counts the slots.
 use super::Game;
-use horizon_client::items::ItemStack;
+use horizon_client::{items::ItemStack, mod_api};
 use std::borrow::Cow;
 
 impl Game<'_> {
@@ -22,6 +22,16 @@ impl Game<'_> {
         }
         Some(slots.into_iter().map(|i| self.slot_view(i)).collect())
     }
+    /// Slot `slot`'s own stack as the open server menu draws it ([`Self::menu_slot_shown`]).
+    pub(super) fn slot_shown(&mut self, slot: usize) -> Option<ItemStack> {
+        let stack = self.slot_mut(slot).clone();
+        self.menu_slot_shown(slot, &stack).into_owned()
+    }
+    /// [`Self::slot_view`] as the open server menu draws it ([`Self::menu_slot_shown`]).
+    pub(super) fn slot_view_shown(&mut self, slot: usize) -> Option<ItemStack> {
+        let stack = self.slot_view(slot);
+        self.menu_slot_shown(slot, &stack).into_owned()
+    }
     /// What the open server menu draws in game slot `internal` holding
     /// `stack`: the stack after native mods' `native_menu_slot_display`
     /// (API @API:menu_slot_display@), asked with the server's slot number.
@@ -33,7 +43,7 @@ impl Game<'_> {
         internal: usize,
         stack: &'a Option<ItemStack>,
     ) -> Cow<'a, Option<ItemStack>> {
-        if horizon_client::mod_api::mods().is_empty() {
+        if mod_api::mods().is_empty() {
             return Cow::Borrowed(stack);
         }
         let Some((_, menu)) = self.remote.as_ref().and_then(|r| r.menu.as_ref()) else {
@@ -45,5 +55,19 @@ impl Game<'_> {
         let mut shown = stack.clone();
         self.native_menu_slot_display(slot, &mut shown);
         Cow::Owned(shown)
+    }
+}
+
+impl Game<'_> {
+    /// The stack a server-opened menu draws in slot `slot` (NeoForge has no
+    /// event for this; mods mix into `Container.getItem` for it): `stack` arrives holding what the slot holds
+    /// and may be replaced, or set to `None` to draw the slot empty. `slot` is
+    /// the server's slot number (`AbstractContainerMenu.slots`, the order of
+    /// `host.menu_stacks()`). Only the picture and the hover tooltip change;
+    /// clicks, quick moves and `menu_stacks` still see the real stack. Asked
+    /// each frame for each slot drawn, only when a mod is installed.
+    /// Client-side. API @API:menu_slot_display@.
+    pub(super) fn native_menu_slot_display(&self, slot: usize, stack: &mut Option<ItemStack>) {
+        mod_api::dispatch_menu_slot_display(self, mod_api::mods(), slot, stack);
     }
 }

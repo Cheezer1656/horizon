@@ -1017,8 +1017,7 @@ use horizon_client::mod_api::{
 };
 pub(crate) use horizon_client::mod_api::{
     ClientboundPlayPacket, NativeBlockRim, NativeColoredLight, NativeLootDrops, NativeMinimap,
-    NativeMod, NativePanelEvent, NativeScreen, NativeScreenView, NativeSlot, NativeStack,
-    NativeZoom,
+    NativeMod, NativePanelEvent, NativeScreen, NativeScreenView, NativeStack, NativeZoom,
 };
 pub(crate) use horizon_client::mod_api::{NativeRecipeCategory, NativeRecipeLookup};
 use horizon_client::{
@@ -3743,51 +3742,6 @@ impl Game<'_> {
         screen: &NativeScreenView<'_>,
     ) {
         mod_api::dispatch_screen_render_post(self, mod_api::mods(), batch, screen);
-    }
-    /// A container screen has drawn its background and not yet its slots
-    /// (`ContainerScreenEvent.Render.Background`): draw behind the slots'
-    /// items and their hover highlight with `native_fill`, `native_sprite`
-    /// and `native_text`. `slots` lists the menu's slots as the screen shows
-    /// them, by menu slot number (`NativeSlot`): `index` is the number the
-    /// server's `ContainerSetSlot` and `ContainerClick` carry, `rect` the slot
-    /// in GUI pixels, `stack` what it holds. It fires on the screens that
-    /// show the inventory menu or a server-opened one (chests, furnaces,
-    /// workstations, a mount, the merchant, the beacon, a mod's screen), once
-    /// a frame; not on the creative screen, nor when no menu numbers the
-    /// slots (`slots` is empty on a single-player container). `&self`: it
-    /// reads and draws only. API @API:container_screen_render@.
-    pub(super) fn native_container_screen_render_background(
-        &self,
-        batch: &mut HudBatch,
-        screen: &NativeScreenView<'_>,
-        slots: &[NativeSlot<'_>],
-    ) {
-        mod_api::dispatch_container_screen_render_background(
-            self,
-            mod_api::mods(),
-            batch,
-            screen,
-            slots,
-        );
-    }
-    /// A container screen has drawn its slots, items and labels, and not yet
-    /// the carried stack or the tooltip (`ContainerScreenEvent.Render.Foreground`):
-    /// draw over the items, a highlight on a slot say, and under the tooltip.
-    /// The arguments and the screens are `native_container_screen_render_background`'s.
-    /// API @API:container_screen_render@.
-    pub(super) fn native_container_screen_render_foreground(
-        &self,
-        batch: &mut HudBatch,
-        screen: &NativeScreenView<'_>,
-        slots: &[NativeSlot<'_>],
-    ) {
-        mod_api::dispatch_container_screen_render_foreground(
-            self,
-            mod_api::mods(),
-            batch,
-            screen,
-            slots,
-        );
     }
     /// A mouse button went down over the open screen
     /// (`ScreenEvent.MouseButtonPressed.Pre`, vanilla's

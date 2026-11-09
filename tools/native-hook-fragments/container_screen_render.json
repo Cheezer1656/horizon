@@ -2,7 +2,7 @@
   "hooks": [
     {
       "name": "container_screen_render_background",
-      "target": "horizon_client::game::native_hooks::Game<'_>::native_container_screen_render_background",
+      "target": "horizon_client::game::native_menu_stacks::Game<'_>::native_container_screen_render_background",
       "mod_api": {"contract": "listen"},
       "neoforge": "ContainerScreenEvent.Render.Background",
       "side": "client",
@@ -10,7 +10,7 @@
     },
     {
       "name": "container_screen_render_foreground",
-      "target": "horizon_client::game::native_hooks::Game<'_>::native_container_screen_render_foreground",
+      "target": "horizon_client::game::native_menu_stacks::Game<'_>::native_container_screen_render_foreground",
       "mod_api": {"contract": "listen"},
       "neoforge": "ContainerScreenEvent.Render.Foreground",
       "side": "client",
@@ -20,14 +20,14 @@
   "helpers": [
     {
       "name": "hovered_slot",
-      "target": "horizon_client::game::native_container_slots::Game<'_>::native_hovered_slot"
+      "target": "horizon_client::game::native_menu_stacks::Game<'_>::native_hovered_slot"
     },
     {
       "name": "slot_rect",
-      "target": "horizon_client::game::native_container_slots::Game<'_>::native_slot_rect"
+      "target": "horizon_client::game::native_menu_stacks::Game<'_>::native_slot_rect"
     }
   ],
   "rust_summary": "the container screens' render points (`native_container_screen_render_background`, `native_container_screen_render_foreground`) and the open container screen's slot layout (`native_hovered_slot`, `native_slot_rect`).",
   "doc_summary": "`native_container_screen_render_background(batch, screen, slots)` (`ContainerScreenEvent.Render.Background`) draws on a container screen after its panel and before its slots' items and hover highlight, and `native_container_screen_render_foreground` (`ContainerScreenEvent.Render.Foreground`) after the items and the front highlight, under the carried stack and the tooltip (`native_screen_render_post` draws over both). `slots` lists the screen's slots in menu order as `NativeSlot { index, rect, stack }`: `index` is the menu slot number (the server's, as `ContainerClick` and `host.menu_stacks()` use), `rect` the slot's 16 x 16 box in GUI pixels, `stack` what it shows (an empty slot has `stack` None, so a highlight can be drawn on it). They fire once a frame on the inventory screen's menus -- the window's own inventory and crafting, chests, furnaces, workstations, the merchant, the beacon, a mount, a mod's screen -- on the server-opened ones and the client's own inventory; not on the creative screen, and `slots` is empty for a stock container, workstation or mount a single-player game runs itself. A hidden slot of a mod screen is not listed. `host.hovered_slot()` is the menu slot number under the pointer, by the hit test the screen's clicks use (the slot plus a pixel on every side), and `host.slot_rect(slot)` a slot's box; both are None off a container screen. With no mods the cost is one empty check per call site; with a mod each call lists the slots and clones their stacks. Bundles need \"hooks\": @API:container_screen_render@.",
-  "comments": ["crates/horizon-client/src/game/native_container_slots.rs"]
+  "comments": ["crates/horizon-client/src/game/native_menu_stacks.rs"]
 }

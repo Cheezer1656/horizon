@@ -578,7 +578,6 @@ impl Game<'_> {
             "gui/sprites/container/beacon/cancel",
         );
         let slots: Vec<usize> = (0..36).chain([INPUT]).collect();
-        self.fire_container_screen_render(batch, false, ox, oy);
         self.draw_hovered_slot_highlight(batch, false, ox, oy);
         for i in slots {
             let (sx, sy) = self.slot_position(i);
@@ -587,7 +586,6 @@ impl Game<'_> {
             }
         }
         self.draw_hovered_slot_highlight(batch, true, ox, oy);
-        self.fire_container_screen_render(batch, true, ox, oy);
         let mut stack_tip = None;
         if let Some(slot) = self.slot_at(batch, self.cursor.0, self.cursor.1) {
             stack_tip = self.slot_mut(slot).clone();

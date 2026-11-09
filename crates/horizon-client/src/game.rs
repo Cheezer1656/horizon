@@ -277,7 +277,6 @@ pub mod native_client_services;
 mod native_client_world;
 mod native_components;
 mod native_configs;
-mod native_container_slots;
 mod native_criteria;
 mod native_damage;
 mod native_data_maps;
@@ -6492,11 +6491,9 @@ impl Game<'_> {
         if self.container.is_none() && self.craft_size != 3 && !self.mount_active() {
             self.draw_inventory_player(batch, ox, oy);
         }
-        self.fire_container_screen_render(batch, false, ox, oy);
         self.draw_hovered_slot_highlight(batch, false, ox, oy);
         self.draw_inventory_slots(batch, ox, oy);
         self.draw_hovered_slot_highlight(batch, true, ox, oy);
-        self.fire_container_screen_render(batch, true, ox, oy);
         self.draw_sort_buttons(batch, ox, oy);
         self.draw_recipe_book(batch);
         let effect_tip = if self.container.is_none() && self.craft_size == 2 && !self.mount_active()

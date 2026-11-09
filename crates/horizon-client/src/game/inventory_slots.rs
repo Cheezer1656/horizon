@@ -266,8 +266,26 @@ impl Game<'_> {
     }
     /// The highlight of the slot under the cursor, for the screens whose
     /// slots all sit in `slot_at`'s grid. `Slot.isHighlightable` is false
-    /// for the crafter's result (`NonInteractiveResultSlot`).
+    /// for the crafter's result (`NonInteractiveResultSlot`). Every container
+    /// screen draws it twice, around its slots, so the container render hooks
+    /// fire with it: the background before the back pass, the foreground
+    /// after the front one (`fire_container_screen_render`).
     pub(super) fn draw_hovered_slot_highlight(
+        &mut self,
+        batch: &mut HudBatch,
+        front: bool,
+        ox: f32,
+        oy: f32,
+    ) {
+        if !front {
+            self.fire_container_screen_render(batch, false, ox, oy);
+        }
+        self.draw_hovered_slot_highlight_only(batch, front, ox, oy);
+        if front {
+            self.fire_container_screen_render(batch, true, ox, oy);
+        }
+    }
+    fn draw_hovered_slot_highlight_only(
         &self,
         batch: &mut HudBatch,
         front: bool,

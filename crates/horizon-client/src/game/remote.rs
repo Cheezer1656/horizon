@@ -697,7 +697,7 @@ pub(super) struct Remote {
     players: HashMap<u128, String>,
     /// `ClientPacketListener.playerInfoMap` as player-list entries, and
     /// which of them are listed.
-    tab_players: HashMap<u128, horizon_client::tab_list::TabPlayer>,
+    pub(super) tab_players: HashMap<u128, horizon_client::tab_list::TabPlayer>,
     /// Each listed profile's unpacked `textures` property.
     skin_textures: HashMap<u128, horizon_client::skins::Textures>,
     /// Active skin and cape from the services profile when the server sent none.
@@ -706,7 +706,7 @@ pub(super) struct Remote {
     skins: HashMap<u128, String>,
     skins_revision: u64,
     published_skins: Option<(usize, u128, u64, u64)>,
-    listed: std::collections::HashSet<u128>,
+    pub(super) listed: std::collections::HashSet<u128>,
     /// `ClientboundLoginPacket.onlineMode`: the player list shows heads.
     pub(super) online_mode: bool,
     /// Player entities in the level: entity id to profile UUID.

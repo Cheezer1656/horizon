@@ -128,3 +128,12 @@ pub(super) fn drop_held_behind_dialog(
 pub(super) fn container_key_clones(button: MouseButton, action: KeyAction) -> bool {
     button == MouseButton::Middle && action != KeyAction::Release
 }
+/// Key events carry the scancode's US-layout code, which ignores XKB options like
+/// `caps:swapescape`. For the keys whose meaning the keymap may remap, take the code
+/// from the keysym the keymap resolved instead. This includes function keys on
+/// remapped media rows; ordinary character bindings still use their physical key.
+pub(super) fn follow_keymap(event: &mut WindowEvent) {
+    if let WindowEvent::KeyboardInput { event, .. } = event {
+        follow_named_keymap(&event.logical_key, &mut event.physical_key);
+    }
+}

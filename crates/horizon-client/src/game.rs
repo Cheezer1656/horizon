@@ -554,8 +554,8 @@ use horizon_world::{
     registry::BlockStateId,
 };
 use key_codes::{
-    container_key_clones, drop_held_behind_dialog, follow_named_keymap, gameplay_has_keyboard,
-    glfw_button, glfw_modifiers, keyboard_button,
+    container_key_clones, drop_held_behind_dialog, follow_keymap, follow_named_keymap,
+    gameplay_has_keyboard, glfw_button, glfw_modifiers, keyboard_button,
 };
 use launch_options::Options;
 use loading_screen::{
@@ -2068,15 +2068,6 @@ fn portal_ticket_can_expire(
     let (x, z) = ticket.chunk;
     world.chunks.get(&(x, z)).is_some_and(|c| c.lit)
         && (-r..=r).all(|dz| (-r..=r).all(|dx| world.chunks.contains_key(&(x + dx, z + dz))))
-}
-/// Key events carry the scancode's US-layout code, which ignores XKB options like
-/// `caps:swapescape`. For the keys whose meaning the keymap may remap, take the code
-/// from the keysym the keymap resolved instead. This includes function keys on
-/// remapped media rows; ordinary character bindings still use their physical key.
-fn follow_keymap(event: &mut WindowEvent) {
-    if let WindowEvent::KeyboardInput { event, .. } = event {
-        follow_named_keymap(&event.logical_key, &mut event.physical_key);
-    }
 }
 
 #[cfg(test)]

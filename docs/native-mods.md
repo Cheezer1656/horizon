@@ -5388,7 +5388,11 @@ A new hook needs its fragment in `tools/native-hook-fragments/` with its `mod_ap
 `{"contract": "cancel", "out": "cancel"}`), its `native_*` function with the placeholder body
 `let _ = (every, parameter);` (all its parameters, in order), and a run of `cargo run -p xtask -- mod-api`.
 That command only replaces the placeholder in `native_hooks.rs` with the `dispatch_<hook>` call; commit
-that source change and the fragment. The `horizon-mod-api-gen` build dependency generates the hook traits,
+that source change and the fragment. `native_hooks.rs` is over the 3000 lines a file may have
+([layers.md](layers.md#file-size)), so it may not grow: a new hook's function can instead go in a small module
+under `game/` (`native_net.rs`, `native_menu_stacks.rs`…), its fragment's `target` naming that module. There it
+writes its `dispatch_<hook>` call itself (the command fills only `native_hooks.rs`) and, like every hook point,
+holds no macro or `cfg`, which horizon-mixins cannot patch; the build refuses it otherwise. The `horizon-mod-api-gen` build dependency generates the hook traits,
 `Host` methods and dispatch code into Cargo's `OUT_DIR` when the game builds, including release builds.
 These generated Rust files are not kept in the source tree or committed, and no manual regeneration is
 needed after a merge. The one exception is the renderer's (`horizon-client-render`, an engine crate, which

@@ -590,6 +590,65 @@ fn free_function_source(target: &str) -> Option<(&'static str, String)> {
         })
 }
 
+/// The `Game` method a hook point `target` names. Most are in native_hooks.rs (`hooks`), where
+/// `cargo run -p xtask -- mod-api` fills a new one's dispatch call. One may live in any module under
+/// game/ (`game`, the target naming that module as a helper's does), to keep a big file from
+/// growing: there it makes its `dispatch_<name>` call itself and holds no macro or `cfg`, which
+/// horizon-mixins could not patch (what `hook_points_stay_hookable` checks in native_hooks.rs).
+fn game_hook<'a>(
+    target: &str,
+    name: &str,
+    hooks: &'a [syn::ItemFn],
+    game: &'a [(String, syn::ItemFn)],
+) -> Result<&'a syn::ItemFn, String> {
+    let native = format!("native_{name}");
+    if let Some(rest) = target.strip_prefix("horizon_client::game::native_hooks::") {
+        if !rest.ends_with(&format!("::{native}")) {
+            return Err(format!("wrong target for {name}"));
+        }
+        return one_function(hooks.iter(), &native);
+    }
+    let found: Vec<_> = game
+        .iter()
+        .filter(|(module, method)| {
+            method.sig.ident == native && !module.ends_with("::native_hooks")
+        })
+        .collect();
+    let [(module, method)] = found[..] else {
+        return Err(format!(
+            "wrong target for {name}: expected one {native} under game/"
+        ));
+    };
+    let expected = format!("{module}::Game<'_>::{native}");
+    if target != expected {
+        return Err(format!(
+            "wrong target for {name}: {target}, it is {expected}"
+        ));
+    }
+    if !has_call(&method.block, &format!("dispatch_{name}")) {
+        return Err(format!(
+            "{native}: a hook point outside native_hooks.rs makes its dispatch_{name} call itself"
+        ));
+    }
+    struct Unhookable(bool);
+    impl<'ast> Visit<'ast> for Unhookable {
+        fn visit_macro(&mut self, _: &'ast syn::Macro) {
+            self.0 = true;
+        }
+        fn visit_attribute(&mut self, attr: &'ast syn::Attribute) {
+            self.0 |= attr.path().is_ident("cfg") || attr.path().is_ident("cfg_attr");
+        }
+    }
+    let mut unhookable = Unhookable(false);
+    unhookable.visit_item_fn(method);
+    if unhookable.0 {
+        return Err(format!(
+            "{native}: a macro or cfg in a hook point, which horizon-mixins cannot patch"
+        ));
+    }
+    Ok(method)
+}
+
 /// Whether a hook function needs its dispatch `call` filled in: false when it
 /// makes the call; true when it is a `Game` or `GameLevel` method whose body is
 /// only the placeholder a new hook starts with, `let _ = (every, parameter);`
@@ -721,9 +780,17 @@ pub fn fill_hooks(root: &Path) -> Result<(), String> {
 fn render_hooks_current(root: &Path, render: &str) -> Result<(), String> {
     let path = root.join(RENDER_HOOKS);
     let committed = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    // rustfmt adds a trailing comma where it wraps a list (`fill_hooks` formats the file), which
+    // the generator's one-line code lacks: the same code either way.
     let tokens = |code: &str| {
         syn::parse_file(code)
-            .map(|file| file.into_token_stream().to_string())
+            .map(|file| {
+                file.into_token_stream()
+                    .to_string()
+                    .replace(" ,)", ")")
+                    .replace(" , }", " }")
+                    .replace(" ,]", "]")
+            })
             .map_err(|e| format!("{}: {e}", path.display()))
     };
     if tokens(&committed)? == tokens(render)? {
@@ -758,6 +825,13 @@ fn sources(root: &Path, fill: FillMode) -> Result<Sources, String> {
             methods.extend(impl_functions(item));
         }
     }
+    // Every `impl Game` method under game/: helpers, and hook points kept out of native_hooks.rs.
+    let mut game = Vec::new();
+    game_methods(
+        &root.join("crates/horizon-client/src/game"),
+        "horizon_client::game",
+        &mut game,
+    )?;
     let mut traits = String::new();
     let mut dispatch = String::new();
     let mut render_traits = String::new();
@@ -806,13 +880,8 @@ fn sources(root: &Path, fill: FillMode) -> Result<Sources, String> {
                 },
             )
         } else {
-            if !target.starts_with("horizon_client::game::native_hooks::")
-                || !target.ends_with(&format!("::{native}"))
-            {
-                return Err(format!("wrong target for {name}"));
-            }
             (
-                one_function(methods.iter(), &native)?.clone(),
+                game_hook(target, name, &methods, &game)?.clone(),
                 format!("dispatch_{name}"),
             )
         };
@@ -1026,12 +1095,6 @@ fn sources(root: &Path, fill: FillMode) -> Result<Sources, String> {
     let api_source = fs::read_to_string(root.join("crates/horizon-client/src/mod_api.rs"))
         .map_err(|e| e.to_string())?;
     let types = api_types(&api_source, &code)?;
-    let mut game = Vec::new();
-    game_methods(
-        &root.join("crates/horizon-client/src/game"),
-        "horizon_client::game",
-        &mut game,
-    )?;
     let mut host_traits = String::new();
     let mut host_impl = String::new();
     let mut names = HashSet::new();
@@ -1237,6 +1300,73 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
+    /// A hook point may live in any module under game/ when it makes its own dispatch call and holds
+    /// nothing horizon-mixins cannot patch; in native_hooks.rs it may still wait to be filled.
+    #[test]
+    fn hook_points_outside_native_hooks() {
+        let method = |source: &str| -> syn::ItemFn { syn::parse_str(source).unwrap() };
+        let module = |name: &str| format!("horizon_client::game::{name}");
+        let game = vec![
+            (
+                module("native_net"),
+                method(
+                    "fn native_sent(&self, cancel: &mut bool) { mod_api::dispatch_sent(self, mod_api::mods(), cancel); }",
+                ),
+            ),
+            (
+                module("native_menus"),
+                method("fn native_bare(&self) { let _ = (); }"),
+            ),
+            (
+                module("native_menus"),
+                method(
+                    "fn native_logged(&self) { log::info!(\"x\"); mod_api::dispatch_logged(self, mod_api::mods()); }",
+                ),
+            ),
+            (
+                module("native_menus"),
+                method(
+                    "fn native_gated(&self) { #[cfg(test)] mod_api::dispatch_gated(self, mod_api::mods()); }",
+                ),
+            ),
+        ];
+        let hooks = [method("fn native_shown(&self) { let _ = (); }")];
+        let found = |target: &str, name: &str| {
+            super::game_hook(
+                &format!("horizon_client::game::{target}"),
+                name,
+                &hooks,
+                &game,
+            )
+            .map(|m| m.sig.ident.to_string())
+        };
+        assert_eq!(
+            found("native_net::Game<'_>::native_sent", "sent").unwrap(),
+            "native_sent"
+        );
+        assert_eq!(
+            found("native_hooks::Game<'_>::native_shown", "shown").unwrap(),
+            "native_shown"
+        );
+        assert_eq!(
+            found("native_menus::Game<'_>::native_sent", "sent").unwrap_err(),
+            "wrong target for sent: horizon_client::game::native_menus::Game<'_>::native_sent, \
+             it is horizon_client::game::native_net::Game<'_>::native_sent"
+        );
+        assert_eq!(
+            found("native_menus::Game<'_>::native_bare", "bare").unwrap_err(),
+            "native_bare: a hook point outside native_hooks.rs makes its dispatch_bare call itself"
+        );
+        for name in ["logged", "gated"] {
+            assert!(
+                found(&format!("native_menus::Game<'_>::native_{name}"), name)
+                    .unwrap_err()
+                    .ends_with("which horizon-mixins cannot patch")
+            );
+        }
+        assert!(found("native_net::Game<'_>::native_missing", "missing").is_err());
+    }
+
     /// The committed render hooks pass while they hold the catalog's code in any layout, and fail
     /// the build once a hook changes.
     #[test]
@@ -1253,6 +1383,16 @@ mod tests {
         )
         .unwrap();
         super::render_hooks_current(&root, code).unwrap();
+        // rustfmt's trailing commas, where it wraps a long list, change nothing.
+        let wrapped = "/// Drawn.\npub trait RenderHooks { fn drawn(&self, a: u8, b: u8) {} }\n\
+                       pub fn go() { let e = E { a: 1, b: [2, 3] }; }\n";
+        std::fs::write(
+            &path,
+            "/// Drawn.\npub trait RenderHooks {\n    fn drawn(&self, a: u8, b: u8,) {}\n}\n\
+             pub fn go() {\n    let e = E {\n        a: 1,\n        b: [2, 3,],\n    };\n}\n",
+        )
+        .unwrap();
+        super::render_hooks_current(&root, wrapped).unwrap();
         let changed = code.replace("drawn(&self)", "drawn(&self, partial: f32)");
         assert!(
             super::render_hooks_current(&root, &changed)

@@ -2,7 +2,7 @@
   "hooks": [
     {
       "name": "client_chat_send",
-      "target": "horizon_client::game::native_hooks::Game<'_>::native_client_chat_send",
+      "target": "horizon_client::game::native_net::Game<'_>::native_client_chat_send",
       "neoforge": "ClientChatEvent",
       "side": "client",
       "cancellable": true,
@@ -13,7 +13,7 @@
     },
     {
       "name": "client_packet_sent",
-      "target": "horizon_client::game::native_hooks::Game<'_>::native_client_packet_sent",
+      "target": "horizon_client::game::native_net::Game<'_>::native_client_packet_sent",
       "side": "client",
       "cancellable": true,
       "mod_api": {

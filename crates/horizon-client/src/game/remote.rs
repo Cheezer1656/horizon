@@ -1638,32 +1638,19 @@ impl Game<'_> {
         self.titles.reset_times();
     }
 
-    /// Sends a play packet, once `native_client_packet_sent` lets it go.
     pub(super) fn send(&mut self, packet: S) {
-        if self.remote.is_none() {
-            return;
-        }
-        // MultiPlayerGameMode's attack, interact, useItem, useItemOn, releaseUsingItem, dropItem and
-        // piercingAttack run ensureHasSentCarriedItem before their packet: a slot the number keys
-        // chose this tick goes out first. A miss, a dig's start or a swap waits for the next tick.
-        if let S::Attack(_) | S::Interact(_) | S::UseItem(_) | S::UseItemOn(_) = &packet {
-            self.remote_send_carried();
-        } else if let S::PlayerAction(a) = &packet
-            && matches!(a.action, 4 | 5 | 6 | 8)
-        {
-            self.remote_send_carried();
-        }
-        if !self
-            .remote
-            .as_ref()
-            .is_some_and(|r| r.session.sending_play())
-        {
-            return;
-        }
-        if self.client_packet_may_send(&packet)
-            && let Some(r) = &self.remote
-        {
-            r.session.send(packet);
+        if self.remote.is_some() {
+            // MultiPlayerGameMode's attack, interact, useItem, useItemOn, releaseUsingItem, dropItem and
+            // piercingAttack run ensureHasSentCarriedItem before their packet: a slot the number keys
+            // chose this tick goes out first. A miss, a dig's start or a swap waits for the next tick.
+            if let S::Attack(_) | S::Interact(_) | S::UseItem(_) | S::UseItemOn(_) = &packet {
+                self.remote_send_carried();
+            } else if let S::PlayerAction(a) = &packet
+                && matches!(a.action, 4 | 5 | 6 | 8)
+            {
+                self.remote_send_carried();
+            }
+            self.send_heard(packet);
         }
     }
     /// `LocalPlayer.isShiftKeyDown` (and so `isSecondaryUseActive`): the input as of the player's
@@ -9793,13 +9780,12 @@ impl Game<'_> {
     /// `MultiPlayerGameMode.ensureHasSentCarriedItem`: the server hears of a
     /// new selected slot before anything the slot acts with.
     fn remote_send_carried(&mut self) {
-        let slot = self.selected;
         if let Some(r) = &self.remote
-            && r.carried.get() != Some(slot)
+            && r.carried.get() != Some(self.selected)
         {
-            r.carried.set(Some(slot));
-            self.send(S::SetCarriedItem(play::SetCarriedItem {
-                slot: slot as i16,
+            r.carried.set(Some(self.selected));
+            self.send_heard(S::SetCarriedItem(play::SetCarriedItem {
+                slot: self.selected as i16,
             }));
         }
     }

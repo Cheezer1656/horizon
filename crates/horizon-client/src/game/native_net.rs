@@ -5,7 +5,7 @@
 //! reaches `native_net_from_client` once the hub is back, and what a mod sends
 //! a player leaves at the tick's end, from whichever hook sent it.
 use super::{Game, lan::LanHost};
-use horizon_client::mod_api::ServerboundPlayPacket;
+use horizon_client::{chat::normalize_chat_message, mod_api, mod_api::ServerboundPlayPacket};
 use horizon_protocol::{
     mod_net::{self, Message},
     packets::{
@@ -326,6 +326,80 @@ impl Game<'_> {
         }
         self.send(packet);
         Ok(())
+    }
+}
+
+/// What the player's client sends: typed chat lines and play packets, as native mods change or
+/// cancel them (`native_client_chat_send`, `native_client_packet_sent`).
+impl Game<'_> {
+    /// NeoForge's `ClientChatEvent`: a chat line (not a command) the player
+    /// typed is about to go out. `message` is the line as the chat box
+    /// normalizes it (trimmed, whitespace runs collapsed, at most 256 UTF-16
+    /// units); change it and the new text is sent (and, with no server, shown)
+    /// instead, or set `cancel` and nothing is sent. Told after the line is in
+    /// the chat history and before a server sees it; a rewrite is normalized
+    /// again, and one left empty or starting with `/` is dropped, so a mod
+    /// cannot turn a line into a command. A command (a line starting with `/`)
+    /// is not told: `native_command` covers the ones a mod owns. Lines a mod
+    /// sends with `send_chat`, a control-socket `chat` and a clicked command
+    /// are not told. Client-side. API @API:chat_send_packet_sent@.
+    pub(super) fn native_client_chat_send(&mut self, message: &mut String, cancel: &mut bool) {
+        mod_api::dispatch_client_chat_send(self, mod_api::mods(), message, cancel);
+    }
+    /// A play packet the client is about to send to the server, decoded, in
+    /// the order the game sends them: chat and commands, movement, container
+    /// clicks and closes, interactions, a mod's `send_packet` and plugin
+    /// payloads, all that go through the game's connection. Set `cancel` and
+    /// the packet is dropped (the game has already updated its own state as if
+    /// it went out, so cancelling a packet the game predicts, such as a
+    /// container click, can desynchronize it from the server). Packets a mod
+    /// sends from this hook are sent without being told again. Not told: the
+    /// connection's own replies that don't pass through the game (keep-alives,
+    /// pongs, resource pack answers, dialog click answers, far terrain
+    /// requests) and the configuration phase. Runs every tick for movement
+    /// and tick-end packets; with no mod loaded it costs one empty loop. The
+    /// packet is read-only. Client-side, on any server, single player's own
+    /// included. API @API:chat_send_packet_sent@.
+    pub(super) fn native_client_packet_sent(
+        &mut self,
+        packet: &ServerboundPlayPacket,
+        cancel: &mut bool,
+    ) {
+        mod_api::dispatch_client_packet_sent(self, mod_api::mods(), packet, cancel);
+    }
+    /// The end of `Game::send`: `packet` goes to the server once `native_client_packet_sent` lets
+    /// it. With no mod, straight to the connection. A packet a mod sends while the hook runs is
+    /// not told again, and one the connection would drop (closed, or back in configuration) is
+    /// not told at all.
+    pub(super) fn send_heard(&mut self, packet: S) {
+        let Some(r) = &self.remote else {
+            return;
+        };
+        if mod_api::mods().is_empty() || self.native_net.in_packet_sent {
+            r.session.send(packet);
+            return;
+        }
+        if !r.session.sending_play() {
+            return;
+        }
+        self.native_net.in_packet_sent = true;
+        let mut cancel = false;
+        self.native_client_packet_sent(&packet, &mut cancel);
+        self.native_net.in_packet_sent = false;
+        if !cancel && let Some(r) = &self.remote {
+            r.session.send(packet);
+        }
+    }
+    /// A typed chat line after `native_client_chat_send`: `None` when a mod
+    /// took it, else the text to send.
+    pub(super) fn client_chat_to_send(&mut self, message: String) -> Option<String> {
+        let (mut message, mut cancel) = (message, false);
+        self.native_client_chat_send(&mut message, &mut cancel);
+        if cancel {
+            return None;
+        }
+        let message = normalize_chat_message(&message);
+        (!message.is_empty() && !message.starts_with('/')).then_some(message)
     }
 }
 

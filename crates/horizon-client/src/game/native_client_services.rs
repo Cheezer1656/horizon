@@ -691,6 +691,20 @@ impl Game<'_> {
     }
 }
 
+impl Game<'_> {
+    /// The players the connection lists, in no set order; skins as the
+    /// server's entries have them. None without a connection.
+    pub(super) fn remote_listed_players(&self) -> Option<Vec<horizon_client::tab_list::TabPlayer>> {
+        let r = self.remote.as_ref()?;
+        Some(
+            r.listed
+                .iter()
+                .filter_map(|u| r.tab_players.get(u).cloned())
+                .collect(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

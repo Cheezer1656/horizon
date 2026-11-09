@@ -6,6 +6,7 @@
       "target": "horizon_client::game::native_client_services::Game<'_>::native_text_scaled"
     }
   ],
+  "comments": ["crates/horizon-client/src/game/native_client_services.rs"],
   "rust_summary": "scaled GUI text (`native_text_scaled`), as a pose `scale` draws it.",
   "doc_summary": "`native_text_scaled(batch, text, at, scale, argb, shadow)` draws a line of text with its top left at `at`, `scale` times its size (a pose `translate(at)`, `scale(scale)`: the shadow offset grows too), in `argb` (an alpha under 4 reads as opaque), and returns the scaled width in GUI pixels. A `scale` that is not finite and positive draws nothing. It scales the glyph quads it just pushed, so the cost is that of `native_text`. Bundles need \"hooks\": @API:text_scaled@."
 }

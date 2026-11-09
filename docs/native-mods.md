@@ -4589,7 +4589,7 @@ error while the chat isn't open. Bundles need `"hooks": @API:chat_input@`.
 
 ### Chat lines a client mod shows and edits
 
-API @API:client_chat_edit@, `crates/horizon-client/src/game/native_hooks.rs`: on a client, `Host::client_chat_add(line)`
+API @API:client_chat_edit@, `crates/horizon-client/src/game/native_client_services.rs`: on a client, `Host::client_chat_add(line)`
 shows a `Text` in the player's own chat and returns a handle for it. `client_chat_edit(handle, text)` replaces the line
 in place and `client_chat_remove(handle)` takes it out. A trait mod builds the `Text` with `mod_api::{Text, Style,
 ClickEvent}`: a span's colour, bold, italic, underline, `click` (`RunCommand`, `SuggestCommand`, `OpenUrl`,

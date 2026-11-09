@@ -555,6 +555,34 @@ impl Game<'_> {
     }
 }
 
+impl Game<'_> {
+    /// A line in the client's own chat, styled as `line` is (its colours, click and hover events),
+    /// that the mod can change or take back later by the returned handle (never 0). Client-side.
+    /// It shows however the Chat option is set and, unlike the server's lines, is not told to
+    /// `native_client_chat_received`. It never joins a compact chat count. The handle names the line
+    /// until it leaves the 100 messages the chat keeps (or the chat is cleared).
+    /// API @API:client_chat_edit@.
+    pub(super) fn native_client_chat_add(&mut self, line: Text) -> u64 {
+        let focused = self.screen == Screen::Chat;
+        let atlas = &self.gui.atlas;
+        self.ui.chat.add_handled(atlas, line, self.ticks, focused)
+    }
+    /// Replaces the content of a line `native_client_chat_add` made, where it is: its time, age
+    /// and place stay, and a reader scrolled up keeps their view. False for a handle the chat no
+    /// longer holds (0, removed, or past the 100 messages). Client-side. API @API:client_chat_edit@.
+    pub(super) fn native_client_chat_edit(&mut self, line: u64, text: Text) -> bool {
+        let focused = self.screen == Screen::Chat;
+        let atlas = &self.gui.atlas;
+        self.ui.chat.edit_handled(atlas, line, text, focused)
+    }
+    /// Takes a line `native_client_chat_add` made out of the chat. False for a handle the chat no
+    /// longer holds. Client-side. API @API:client_chat_edit@.
+    pub(super) fn native_client_chat_remove(&mut self, line: u64) -> bool {
+        let focused = self.screen == Screen::Chat;
+        self.ui.chat.remove_handled(line, focused)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

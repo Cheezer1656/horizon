@@ -1869,6 +1869,10 @@ pub use camera_pose::NativeShake;
 pub(super) use camera_pose::hand_pose_matrix;
 use camera_pose::{bounded_shake, posed_camera, shake_pose};
 
+#[path = "native_reads.rs"]
+mod reads;
+pub use reads::{NativeClock, NativePlayer};
+
 /// The mod screen open on this client: the block it is for, the key its
 /// slots are under, the window id of its menu, the menu's data slots as
 /// the server sent them, and what the server sent before the menu opened
@@ -1907,30 +1911,6 @@ impl OpenNativeScreen {
         }
         true
     }
-}
-
-/// The player as a native mod reads it.
-#[derive(Clone, Debug, PartialEq)]
-pub struct NativePlayer {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
-    /// Degrees; 0 faces south, 90 west (`Direction.fromYRot`).
-    pub yaw: f32,
-    pub pitch: f32,
-    /// `minecraft:overworld`, `minecraft:the_nether`, `minecraft:the_end`.
-    pub dimension: &'static str,
-}
-
-/// The world's clock as a client mod reads it (`native_clock`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct NativeClock {
-    /// Ticks since the world was created (`Level.getGameTime`).
-    pub game_time: i64,
-    /// The time of day in ticks (`Level.getOverworldClockTime`): 0 at sunrise, 24000 a
-    /// day. It keeps counting past 24000 (`/time add`, days going by), so take
-    /// it modulo 24000 for the hour; `/time set` can make it negative.
-    pub day_time: i64,
 }
 
 /// How the panel lays out a recipe of `native_panel_recipes`.

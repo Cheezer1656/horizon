@@ -1,23 +1,7 @@
 //! The recipe data a native mod reads (`native_recipes`, `native_panel_recipes`): moved
 //! as is out of native_hooks.rs, which is over the file-size limit (docs/layers.md#file-size).
+use super::NativeRecipeLayout;
 use horizon_client::mod_api::NativeStack;
-
-/// How the panel lays out a recipe of `native_panel_recipes`.
-#[allow(dead_code, reason = "native mod API (docs/native-mods.md)")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum NativeRecipeLayout {
-    /// A crafting grid of `width` x `height` slots, an arrow and the result.
-    Grid,
-    /// One input over a flame, an arrow and the result (furnaces, smokers,
-    /// campfires).
-    Cooking,
-    /// One input, an arrow and the result (the stonecutter).
-    Single,
-    /// Template, base and addition, an arrow and the result.
-    Smithing,
-    /// A potion and an ingredient, an arrow and the result.
-    Brewing,
-}
 
 /// A recipe the panel shows (`native_panel_recipes`). Each slot, and the
 /// result, cycles through its stacks, one a second; an empty slot shows

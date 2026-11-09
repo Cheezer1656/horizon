@@ -1932,11 +1932,27 @@ pub struct NativeClock {
     pub day_time: i64,
 }
 
+/// How the panel lays out a recipe of `native_panel_recipes`.
+#[allow(dead_code, reason = "native mod API (docs/native-mods.md)")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum NativeRecipeLayout {
+    /// A crafting grid of `width` x `height` slots, an arrow and the result.
+    Grid,
+    /// One input over a flame, an arrow and the result (furnaces, smokers,
+    /// campfires).
+    Cooking,
+    /// One input, an arrow and the result (the stonecutter).
+    Single,
+    /// Template, base and addition, an arrow and the result.
+    Smithing,
+    /// A potion and an ingredient, an arrow and the result.
+    Brewing,
+}
+
 #[path = "native_recipe_types.rs"]
 mod recipe_types;
 pub(crate) use recipe_types::{
-    NativeItem, NativeRecipe, NativeRecipeKind, NativeRecipeLayout, NativeRecipeStack,
-    NativeRecipeView, NativeRecipes,
+    NativeItem, NativeRecipe, NativeRecipeKind, NativeRecipeStack, NativeRecipeView, NativeRecipes,
 };
 
 /// The mappings `native_mapping` answers for, with the key their default

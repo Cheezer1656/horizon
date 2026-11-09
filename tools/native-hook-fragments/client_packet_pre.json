@@ -2,7 +2,7 @@
   "hooks": [
     {
       "name": "client_packet_pre",
-      "target": "horizon_client::game::native_hooks::Game<'_>::native_client_packet_pre",
+      "target": "horizon_client::game::native_net::Game<'_>::native_client_packet_pre",
       "side": "client",
       "cancellable": true,
       "mod_api": {
@@ -12,5 +12,8 @@
     }
   ],
   "rust_summary": "cancelling a play packet from the server before the game handles it (`native_client_packet_pre`).",
-  "doc_summary": "A play packet from the server is about to be handled, decoded, in the order the server sent them: `native_client_packet_pre(packet, cancel)`. Set `cancel` and the game never handles it, so a mod can hide a title, a sound or a particle burst (`SetTitleText`, `Sound`, `LevelParticles`). `native_client_packet` has already heard the packet, cancelled or not. Packets the network thread handles itself are not heard, as for `native_client_packet`. A cancelled chunk, entity or inventory packet leaves that state as it was. Bundles need \"hooks\": @API:client_packet_pre@."
+  "doc_summary": "A play packet from the server is about to be handled, decoded, in the order the server sent them: `native_client_packet_pre(packet, cancel)`. Set `cancel` and the game never handles it, so a mod can hide a title, a sound or a particle burst (`SetTitleText`, `Sound`, `LevelParticles`). `native_client_packet` has already heard the packet, cancelled or not. Packets the network thread handles itself are not heard, as for `native_client_packet`. A cancelled chunk, entity or inventory packet leaves that state as it was. Bundles need \"hooks\": @API:client_packet_pre@.",
+  "comments": [
+    "crates/horizon-client/src/game/native_net.rs"
+  ]
 }

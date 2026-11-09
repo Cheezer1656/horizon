@@ -8583,23 +8583,6 @@ impl Game<'_> {
     pub(super) fn native_client_packet(&mut self, packet: &ClientboundPlayPacket) {
         mod_api::dispatch_client_packet(self, mod_api::mods(), packet);
     }
-    /// A play packet from the server reached the window's game, just before
-    /// the game handles it, and a mod may cancel it. It is heard in the same
-    /// places and order as `native_client_packet`, which has already heard it
-    /// (cancelled or not). Set `cancel` and the game never handles the packet:
-    /// a title, sound or particle packet shows nothing; a chunk, entity or
-    /// inventory packet leaves that state as it was, so cancel only what the
-    /// game can do without. The mods after the one that cancels are not told.
-    /// Packets the network thread handles itself are not heard (see
-    /// `native_client_packet`). Client-side, on any server, single player's own
-    /// included. API @API:client_packet_pre@.
-    pub(super) fn native_client_packet_pre(
-        &mut self,
-        packet: &ClientboundPlayPacket,
-        cancel: &mut bool,
-    ) {
-        mod_api::dispatch_client_packet_pre(self, mod_api::mods(), packet, cancel);
-    }
     /// `dimension`'s level opened on the server (NeoForge's `LevelEvent.Load`,
     /// posted in `MinecraftServer.createLevels`): before any of its chunks
     /// (`native_chunk_load`), so a mod sets up what it keeps for the level

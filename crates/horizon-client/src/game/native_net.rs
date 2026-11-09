@@ -5,7 +5,7 @@
 //! reaches `native_net_from_client` once the hub is back, and what a mod sends
 //! a player leaves at the tick's end, from whichever hook sent it.
 use super::{Game, lan::LanHost};
-use horizon_client::mod_api::ServerboundPlayPacket;
+use horizon_client::mod_api::{self, ClientboundPlayPacket, ServerboundPlayPacket};
 use horizon_protocol::{
     mod_net::{self, Message},
     packets::{
@@ -324,6 +324,37 @@ impl Game<'_> {
         }
         self.send(packet);
         Ok(())
+    }
+}
+
+/// Play packets from the server, which native mods hear and may cancel before the game handles
+/// them (`native_client_packet_pre`).
+impl Game<'_> {
+    /// A play packet from the server reached the window's game, just before
+    /// the game handles it, and a mod may cancel it. It is heard in the same
+    /// places and order as `native_client_packet`, which has already heard it
+    /// (cancelled or not). Set `cancel` and the game never handles the packet:
+    /// a title, sound or particle packet shows nothing; a chunk, entity or
+    /// inventory packet leaves that state as it was, so cancel only what the
+    /// game can do without. The mods after the one that cancels are not told.
+    /// Packets the network thread handles itself are not heard (see
+    /// `native_client_packet`). Client-side, on any server, single player's own
+    /// included. API @API:client_packet_pre@.
+    pub(super) fn native_client_packet_pre(
+        &mut self,
+        packet: &ClientboundPlayPacket,
+        cancel: &mut bool,
+    ) {
+        mod_api::dispatch_client_packet_pre(self, mod_api::mods(), packet, cancel);
+    }
+    /// Tells the native mods about a play packet from the server just before the game handles it
+    /// (`native_client_packet`, then `native_client_packet_pre`): true when one of them cancelled
+    /// it, and the game must not handle it.
+    pub(super) fn hear_packet(&mut self, packet: &ClientboundPlayPacket) -> bool {
+        self.native_client_packet(packet);
+        let mut cancel = false;
+        self.native_client_packet_pre(packet, &mut cancel);
+        cancel
     }
 }
 

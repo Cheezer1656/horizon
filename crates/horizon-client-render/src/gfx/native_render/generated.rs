@@ -24,6 +24,34 @@ pub trait RenderHooks: Send + Sync {
     fn world_warp(&self, event: &mut WorldWarpEvent<'_>) {
         let _ = event;
     }
+    /// This client is about to play a sound (`SoundEngine.play`, what NeoForge's `PlaySoundEvent` fires
+    /// on): every sound the client plays, those the server sent and those it makes itself, such as block
+    /// fire, blaze smoke, a projectile's trail or break effects. `sound` is the sound event's id
+    /// (`minecraft:block.fire.ambient`), `source` the sound category it plays on (`block`, `music`,
+    /// `ui`; the `soundCategory_*` option names), `at` where it plays (the listener's offset when it
+    /// follows the listener, as UI sounds and music do) and `volume` and `pitch` the instance's own,
+    /// before the category volume and the sound file's variation. Change `volume` or `pitch`, or set
+    /// `cancel` to silence it: nothing plays, with no subtitle either. A sound that loops or follows an
+    /// entity is asked once, as it starts. It changes only what this client hears: sounds shared with
+    /// guests or sent to other players are untouched. Not called on a game with no sound output
+    /// (a dedicated server). API @API:client_sound_particle@.
+    ///
+    /// Every mod gets `event.cancel` in order and may add, change or remove cancel.
+    fn client_sound(&self, event: &mut ClientSoundEvent<'_>) {
+        let _ = event;
+    }
+    /// This client is about to make a particle (`ClientLevel.addParticle`, after the Particles option
+    /// and the 32 block range have thinned them): the ones the server sent and those the client makes
+    /// itself, such as block fire's smoke, blaze smoke, a projectile's trail or a block's break
+    /// effects. `particle` is the particle type's id (`minecraft:flame`, or a mod's own,
+    /// `mymod:spark`), `at` where it appears and `velocity` how it starts. Set `cancel` and it is not
+    /// made. It changes only what this client draws. Use [`render_hooked`] to skip the work of
+    /// asking when no mod listens. API @API:client_sound_particle@.
+    ///
+    /// Every mod gets `event.cancel` in order and may add, change or remove cancel.
+    fn client_particle(&self, event: &mut ClientParticleEvent<'_>) {
+        let _ = event;
+    }
 }
 /// What [`RenderHooks::world_drawn`] is told. Fields may be added: the struct is `#[non_exhaustive]`.
 #[non_exhaustive]
@@ -68,4 +96,64 @@ pub fn dispatch_world_warp(mods: &[&dyn RenderHooks], warp: &mut WorldWarp) {
     for mod_hook in mods {
         mod_hook.world_warp(&mut event);
     }
+}
+/// What [`RenderHooks::client_sound`] is told. Fields may be added: the struct is `#[non_exhaustive]`.
+#[non_exhaustive]
+pub struct ClientSoundEvent<'a> {
+    pub sound: &'a str,
+    pub source: &'a str,
+    pub at: [f64; 3],
+    pub volume: f32,
+    pub pitch: f32,
+    pub cancel: bool,
+}
+pub fn dispatch_client_sound(
+    mods: &[&dyn RenderHooks],
+    sound: &str,
+    source: &str,
+    at: [f64; 3],
+    volume: &mut f32,
+    pitch: &mut f32,
+    cancel: &mut bool,
+) {
+    let mut event = ClientSoundEvent {
+        sound,
+        source,
+        at,
+        volume: *volume,
+        pitch: *pitch,
+        cancel: *cancel,
+    };
+    for mod_hook in mods {
+        mod_hook.client_sound(&mut event);
+    }
+    *volume = event.volume;
+    *pitch = event.pitch;
+    *cancel = event.cancel;
+}
+/// What [`RenderHooks::client_particle`] is told. Fields may be added: the struct is `#[non_exhaustive]`.
+#[non_exhaustive]
+pub struct ClientParticleEvent<'a> {
+    pub particle: &'a str,
+    pub at: [f64; 3],
+    pub velocity: [f64; 3],
+    pub cancel: bool,
+}
+pub fn dispatch_client_particle(
+    mods: &[&dyn RenderHooks],
+    particle: &str,
+    at: [f64; 3],
+    velocity: [f64; 3],
+    cancel: &mut bool,
+) {
+    let mut event = ClientParticleEvent {
+        particle,
+        at,
+        velocity,
+        cancel: *cancel,
+    };
+    for mod_hook in mods {
+        mod_hook.client_particle(&mut event);
+    }
+    *cancel = event.cancel;
 }
